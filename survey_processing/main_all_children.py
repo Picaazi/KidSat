@@ -3,16 +3,18 @@ Author: Luke Yang
 Date: 2024-06-11
 
 Adapted By: Jack Gidney
-Date: 2024-07-22
+Date: 2024-07-23
 
-This script processes DHS data to generate indicators of poverty and deprivation, then saves the data in train/test splits.
+This script processes DHS data to generate indicators of poverty and deprivation, then aggregates all data up to the cluster level.
+Joins the to the GPS data and saves the data in train/test splits.
+
+Adjust the filepaths at the top of the script as neccesary
 
 Usage:
     python main.py <parent_dir> [config_file]
 
 Arguments:
-    parent_dir: The parent directory enclosing all DHS folders.
-    config_file (optional): The configuration parameters for preprocessing. Defaults to 'processing_params.json' if not provided.
+    dhs_data_dir: The parent directory enclosing all DHS folders.
 
 Functions:
     get_poverty(source_path: str, save_csv: bool = False) -> pd.DataFrame:
@@ -23,10 +25,10 @@ Functions:
             save_csv (bool): If True, saves the resulting DataFrame to a CSV file in the source directory.
 
         Returns:
-            pd.DataFrame: The processed data with deprivation indicators.
+            pd.DataFrame, pd.DataFrame/bool: The dhs data and, the poverty data with deprivation indicators or False.
 
     process_dhs(parent_dir: str, config_file: str) -> None
-        Uses the get_poverty() function to get DHS data and deprivation indicators, aggregates to the cluster level.
+        Uses the get_poverty() function to get DHS data and poverty deprivation indicators, aggregates to the cluster level.
         Adds GPS data, saves as a CSV and saves data in train and test folds.
 
         Parameters:
@@ -44,9 +46,6 @@ Functions:
 
     check_file_integrity(parent_dir: str, all_files:, country_code: string): -> bool
         Checks DHS data contains all the countries specified in JSON config file.
-
-    country_code_to_name(country_code: str) -> str
-        Converts country code to name of country (using JSON config file).  
 """
 
 
@@ -66,23 +65,22 @@ from pandas.api.types import is_numeric_dtype
 
 # Ignore all warnings
 warnings.filterwarnings('ignore')
-# parent directory of this file, dhs data folder and processed dhs data folder
-par_dir = r'C:/Users/jgidn/Documents/Summer Project/KidSat/survey_processing/'
 
-
-def find_sub_file(directory, pattern:str):
-    for f in os.listdir(directory):
-      if pattern.lower() in f.lower():
-        return f
+# parent directory of the processed data, config files and file to store min/max values
+survey_proc_dir = r'C:/Users/jgidn/Documents/Summer Project/KidSatExt/survey_processing/'
+config_file = os.path.join(survey_proc_dir, "processing_params.json")
+cc_file = os.path.join(survey_proc_dir, "dhs_country_code.json")
+min_max_file = os.path.join(survey_proc_dir, "min_max_values.json")
+save_processed_dir = os.path.join(survey_proc_dir, "processed_data/")
 
 
 def get_poverty(source_path, save_csv = False):
     """
-    For each DHS corresponding to a country and a specific year
+    For each DHS survey corresponding to a country and a specific year
     We generate a DataFrame formed of the KR, IR and PR merged, saved as dhs_variables.csv
     We generate another DataFrame, saved as poverty_variables.csv
     This contains basic characteristics of the individual (sex, age, gender, ...)
-    As well as moderate/severe deprivation flags
+    As well as moderate/severe poverty deprivation flags
     If any of the KR, IR, PR do not have the correct columns (due to the age of the dataset)
     Then we will not generate poverty_variables.csv
 
@@ -91,7 +89,7 @@ def get_poverty(source_path, save_csv = False):
         save_csv (boolean): Indicator whether to save poverty_variables and dhs_variables to csvs (False if debugging)
 
     Returns:
-        df (DataFrame): The DataFrame with the deprivation flags
+        dhs_kr, df (DataFrame, DataFrame/bool): The DHS DataFrame and, the poverty DataFrame with the deprivation flags or False
 
     """
 
@@ -152,10 +150,10 @@ def get_poverty(source_path, save_csv = False):
     else:
         dhs_kr = dhs_kr.rename(columns={"v001" : "hv001", "v002" : "hv002"})
 
-    # read PR file, subset columns, add hh weight column
+    # read PR file
     dhs_pr = pd.read_stata(household_datafile, convert_categoricals=False)
     
-    # subset columns of PR and update pov_dfs flag
+    # subset columns of PR and update missing_pr_cols flag
     cols_to_subset = []
     for col in cols_from_pr:
         if col in dhs_pr.columns:
@@ -170,7 +168,7 @@ def get_poverty(source_path, save_csv = False):
     # read IR file
     dhs_ir = pd.read_stata(individual_datafile, convert_categoricals=False)
 
-    # subset columns of IR and update pov_dfs flag
+    # subset columns of IR and update missing_ir_cols flag
     cols_to_subset = []
     for col in cols_from_ir:
         if col in dhs_ir.columns:
@@ -216,6 +214,9 @@ def get_poverty(source_path, save_csv = False):
     dhs_kr['year'] = survey_year
     dhs_kr['survey'] = 'DHS'
 
+    # reset index
+    dhs_kr = dhs_kr.reset_index(drop=True)
+
     # save the final merged dataset
     if save_csv:
         output_path = source_path+'dhs_variables.csv'
@@ -223,10 +224,10 @@ def get_poverty(source_path, save_csv = False):
 
     # check whether we have the correct columns to create the pov_df
     if missing_ir_cols or missing_kr_cols or missing_pr_cols:
-        return False
+        return dhs_kr, False
 
     # lets now create our pov df
-    df = dhs_kr
+    df = dhs_kr.copy()
 
     ## calculate orphanhood proportion
 
@@ -625,98 +626,101 @@ def get_poverty(source_path, save_csv = False):
     file_name = f"poverty_variables.csv"
     if save_csv:
         df.to_csv(os.path.join(source_path,file_name), index=False)
-    return df
+
+    return dhs_kr, df
 
 
-def make_string(integer, length = 8):
-    return str(integer).zfill(length)
-
-
-def check_file_integrity(parent_dir, all_files, country_code):
-    complete = True
-    for f in all_files:
-        if not any(f in string for string in os.listdir(parent_dir)):
-            print(f'{country_code[f[:2]]}\'s data in year {f[-4:]} is missing.')
-            complete = False
-    return complete
-
-
-def process_dhs(parent_dir, config_file):
+def process_dhs(dhs_data_dir):
     """
-    Uses the get_poverty() function to get DHS data and deprivation indicators for each country/year surveyed.
-    Then all the dhs/poverty/gps data is combined into 3 dataframes which are aggregated by cluster
-    This is split into train and test folds, and saved as csvs.
+    Creates DHS DataFrames and Poverty DataFrames using the get_poverty() function.
+    Aggregates these DataFrames to the cluster level and joins these DataFrames with the GPS data
+    Then saves and splits the data into train/test splits.
 
     Parameters:
-        parent_dir (str): The path to the directory containing the DHS data files.
-        config_file (str): The path to the JSON file containing the config information.
+        dhs_data_dir (str): The path to the directory containing the DHS data files.
 
     Returns:
         None
     """
-    # load config json files, check all data is in folder
-    if parent_dir[-1]!='/':
-        parent_dir+=r'/'
+
+    # get file paths of config files and where to save final processed data
+    if dhs_data_dir[-1]!='/':
+        dhs_data_dir += r'/'
+    
+    # load config file
     with open(config_file, 'r') as file:
         config_data = json.load(file)
-    with open(f'{par_dir}dhs_country_code.json', 'r') as file:
+    # load country code to country name file
+    with open(cc_file, 'r') as file:
         dhs_cc = json.load(file)
-    save_to_csv_dir = os.path.join(parent_dir, "dhs_variables.csv")
 
+    # check we have DHS data for each country in config file
     print('Checking file integrity...')
-    if not check_file_integrity(parent_dir, config_data['all_DHS'], dhs_cc):
+    if not check_file_integrity(dhs_data_dir, config_data['all_DHS'], dhs_cc):
         raise FileNotFoundError('DHS data incomplete')
 
-    # create all dhs_variables and poverty_variables datasets
+    # create DataFrames storing dhs data, and if possible create DataFrames with poverty deprivation indicators
     pov_dfs = []
-    print('Summarizing poverty...')
-    for f in tqdm(os.listdir(parent_dir)):
+    dhs_dfs = []
+    print('Creating DHS and Poverty DataFrames...')
+    for f in tqdm(os.listdir(dhs_data_dir)):
         if 'DHS' in f:
-            pov_df = get_poverty(parent_dir+f+'/', save_csv=True) # True
-            # if returned false then we ignore
+            dhs_df, pov_df = get_poverty(dhs_data_dir+f+'/', save_csv=True)
+            
+            # if returned false then it was not possible to create poverty deprivation df
+            dhs_dfs.append(dhs_df)
             if type(pov_df) == pd.DataFrame:                
                 pov_dfs.append(pov_df)
 
-    dhs_dfs = []
-    print('Extracting DHS variables...')
-    for f in tqdm(os.listdir(parent_dir)):
-        if 'DHS' in f:
-            dhs_dfs.append(pd.read_csv(os.path.join(parent_dir,f,'dhs_variables.csv')))
-
-    # group dhs data by cluster and preprocess based on config from JSON file
+    # we will remove if variables are above these thresholds
     thresholds = config_data['dhs_variable_lim']
+    # categorical columns to one hot encode
     columns_to_encode = config_data['categorical_columns']
+    # dhs variables we want to keep in our DataFrame
     matches = config_data['matches']
 
+    # aggregating dhs data by cluster
     dhs_dfs_agg = []
-    print('Aggregating DHS variables...')
+    print('Aggregating DHS Data By Cluster')
     for df in tqdm(dhs_dfs):
         ccode = df.loc[0, 'countrycode']
         year = str(df.loc[0, "year"])
+
+        # remove rows of whose columns are NaN or above a certain threshold
         for column, threshold in thresholds.items():
             if column in df.columns:
                 df = df[(df[column] <= threshold) | (df[column].isna())]
 
+        # find which categorical columns are in our dataframe and change these from floats to integers
         filtered_columns_to_encode = [col for col in columns_to_encode if col in df.columns]
-        for col in df.columns:
-            if col in filtered_columns_to_encode:
-                df[col] = df[col].astype('Int64')
+        df[filtered_columns_to_encode] = df[filtered_columns_to_encode].astype("Int64")
 
+        # one hot encode
         df = pd.get_dummies(df, columns=filtered_columns_to_encode)
+
+        # group by averaging over the cluster
         df_agg = df.select_dtypes(include=[np.number, bool]).groupby('hv001').agg('mean').reset_index()
+
+        # add id column so we can join to poverty data and GPS data later
         df_agg['id'] = ccode + year + df_agg['hv001'].apply(make_string)
 
         dhs_dfs_agg.append(df_agg)
+
+    # concat dhs data vertically
     dhs_df_all = pd.concat(dhs_dfs_agg)
 
+    # grab names of dhs variables we want to keep
     existing_cols = [col for col in matches if col in dhs_df_all.columns]
 
+    # also grab names of cols we want to keep that have the correct prefix 'col_'
     additional_cols = []
     for col in matches:
         if col not in dhs_df_all.columns:
             pattern_cols = [c for c in dhs_df_all.columns if c.startswith(f"{col}_")]
             additional_cols.extend(pattern_cols)
     cols_to_select = existing_cols + additional_cols + ['id']
+
+    # remove all cols not selected
     dhs_df_all = dhs_df_all[list(set(cols_to_select))]
 
     # group poverty data by cluster
@@ -725,41 +729,52 @@ def process_dhs(parent_dir, config_file):
     for df in tqdm(pov_dfs):
         ccode = df.loc[0, 'countrycode']
         year = str(df.loc[0, "year"])
+
+        # group by averaging over cluster
         df_agg = df.select_dtypes(include=[np.number]).groupby('cluster').agg('mean').reset_index()
+
+        # add id column so we can join to DHS data and GPS data later
         df_agg['id'] = ccode + year + df_agg['cluster'].apply(make_string)
         poverty_dfs_agg.append(df_agg)
+
+    # vertically concat all poverty data
     pov_df_all = pd.concat(poverty_dfs_agg)
 
-    ## Calculating Centroids
+    # get centroid data
     gdfs = []
-    for f in os.listdir(parent_dir):
+    # iterate through all DHS surveys
+    for f in os.listdir(dhs_data_dir):
         if 'DHS' in f:
-            for sub_f in os.listdir(os.path.join(parent_dir,f)):
+            # iterate through all sub files to find GPS data
+            for sub_f in os.listdir(os.path.join(dhs_data_dir,f)):
                 if sub_f.__contains__('GE'):
-                    shape_file = os.path.join(parent_dir, f, sub_f)
+                    shape_file = os.path.join(dhs_data_dir, f, sub_f)
+                    # load geodataframe and save to list
                     gdf = gpd.read_file(shape_file)
-                    # Append to the list of GeoDataFrames.
                     gdfs.append(gdf)
+
+    # vertically concat all geodata
     combined_gdf = gpd.GeoDataFrame(pd.concat(gdfs, ignore_index=True))
 
-
-    def country_code_to_name(country_code):
-        return dhs_cc[country_code]
-
-
-    combined_gdf['COUNTRY'] = combined_gdf['DHSCC'].apply(country_code_to_name)
+    # convert country code to country name, create survey_name, get year and centroid ID
+    combined_gdf['COUNTRY'] = combined_gdf['DHSCC'].apply(lambda cc: dhs_cc[cc])
     combined_gdf['SURVEY_NAME'] = [combined_gdf.iloc[i]['COUNTRY']+'_DHS_'+str(int(combined_gdf.iloc[i]['DHSYEAR'])) for i in range(combined_gdf.shape[0])]
     combined_gdf['YEAR'] =combined_gdf['DHSYEAR'].apply(int)
     combined_gdf['CENTROID_ID']  = combined_gdf['DHSID']
 
+    # subset columns
     centroid_df = combined_gdf[['CENTROID_ID', 'SURVEY_NAME', 'COUNTRY','YEAR', 'LATNUM', 'LONGNUM']]
+
+    # remove all columns wiht 0 lat and 0 long
     centroid_df = centroid_df[~((centroid_df['LATNUM'] == 0) & (centroid_df['LONGNUM'] == 0))]
+
+    # drop duplicates and reset index of dataframes before merge
     centroid_df.drop_duplicates(inplace=True)
     pov_df_all.drop_duplicates(inplace=True)
     dhs_df_all.drop_duplicates(inplace=True)
     centroid_df = centroid_df.reset_index(drop=True)
 
-    # merge dhs, poverty data and GPS data
+    # merge dhs, poverty data and GPS data on centroid ID/id
     merged_centroid_df = pd.merge(centroid_df, pov_df_all, left_on='CENTROID_ID', right_on='id', how='left')
     merged_centroid_df = pd.merge(merged_centroid_df, dhs_df_all, left_on='CENTROID_ID', right_on='id', how='left')
 
@@ -767,12 +782,13 @@ def process_dhs(parent_dir, config_file):
     merged_centroid_df = merged_centroid_df.drop(["hhid", "indid", "id_x", "id_y", "year_interview"], axis=1)
 
     # remove all over 16s
-    # merged_centroid_df = merged_centroid_df[merged_centroid_df["age"] < 16]
+    merged_centroid_df = merged_centroid_df[merged_centroid_df["age"] < 16]
 
     # only want to scale certain columns
     no_scale_cols = ["CENTROID_ID", "SURVEY_NAME", "COUNTRY", "YEAR",
                     "LATNUM", "LONGNUM", "cluster"]
     df_subset = merged_centroid_df.drop(no_scale_cols, axis=1)
+
     # Remove columns if all values are NaN
     df_subset = df_subset.dropna(axis=1, how='all')
 
@@ -794,27 +810,32 @@ def process_dhs(parent_dir, config_file):
     # Apply scaling to appropriate columns
     df_scaled = df_subset.apply(scale_column)
 
-    # Combine the original first 7 columns with the processed subset
+    # Combine the no scale cols with the scaled cols
     df_processed = pd.concat([merged_centroid_df.loc[:, no_scale_cols], df_scaled], axis=1)
+
     # Save min-max dictionary locally
-    with open('min_max_values.json', 'w') as f:
+    with open(min_max_file, 'w') as f:
         json.dump(min_max_dict, f, indent=4)
 
+    # get names of cols for mod/sev deprivation (but not one hot encoded cols)
     col_pattern = r"^[a-zA-Z]*\d*_[^a-zA-Z]"
     matching_columns = [col for col in df_processed.columns if re.match(f"^{col_pattern}", col)]
 
-    # Fill NaN values with 0 in the matched columns
+    # fill NaN values with 0 in the matched columns
     df_processed[matching_columns] = df_processed[matching_columns].fillna(0)
+    
+    # save dataframe and train/test splits
+    save_split(df_processed, save_processed_dir)
 
-    df_processed.to_csv(save_to_csv_dir, index=False)
 
-    save_split(df_processed)
+def save_split(df, save_dir):
+    # save processed dataframe
+    df.to_csv(f'{save_dir}dhs_processed.csv', index=False)
 
-
-def save_split(df):
-    save_par_dir = r'C:/Users/jgidn/Documents/Summer Project/KidSat/survey_processing/processed_data/'
-    df.to_csv(f'{save_par_dir}dhs_variables.csv', index=False)
+    # shuffle dataframe
     df = df.sample(frac=1, random_state=42)
+
+    # split and save data into 5 train/test folds
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
     fold = 1
     for train_index, test_index in kf.split(df):
@@ -823,26 +844,48 @@ def save_split(df):
         test_df = df.iloc[test_index]
         
         # Save to CSV files
-        train_df.to_csv(f'{save_par_dir}train_fold_{fold}.csv', index=False)
-        test_df.to_csv(f'{save_par_dir}test_fold_{fold}.csv', index=False)
+        train_df.to_csv(f'{save_dir}train_fold_{fold}.csv', index=False)
+        test_df.to_csv(f'{save_dir}test_fold_{fold}.csv', index=False)
         
         fold += 1
-        old_df = df[df['YEAR'] < 2020]
-        new_df = df[df['YEAR'] >= 2020]
-        new_df.to_csv(f'{save_par_dir}after_2020.csv', index=False)
-        old_df.to_csv(f'{save_par_dir}before_2020.csv', index=False)
+
+    # also save pre/post 2020 data
+    old_df = df[df['YEAR'] < 2020]
+    new_df = df[df['YEAR'] >= 2020]
+    new_df.to_csv(f'{save_dir}after_2020.csv', index=False)
+    old_df.to_csv(f'{save_dir}before_2020.csv', index=False)
+
+
+def find_sub_file(directory, pattern:str):
+    for f in os.listdir(directory):
+      if pattern.lower() in f.lower():
+        return f
+
+
+def make_string(integer, length = 8):
+    return str(integer).zfill(length)
+
+
+def check_file_integrity(parent_dir, all_files, country_code):
+    complete = True
+    for f in all_files:
+        if not any(f in string for string in os.listdir(parent_dir)):
+            print(f'{country_code[f[:2]]}\'s data in year {f[-4:]} is missing.')
+            complete = False
+    return complete
     
 
 def main():
     # Setup argument parser
     parser = argparse.ArgumentParser(description="Process DHS data to a single CSV file.")
-    parser.add_argument("parent_dir", help="The parent directory enclosing all DHS folders")
-    parser.add_argument("config_file", nargs='?', default=f'{par_dir}processing_params.json', help="The configuration parameters for preprocessing (default: processing_params.json)")
-    # Parse arguments
+    parser.add_argument("dhs_data_dir", help="The parent directory enclosing all DHS folders")
     args = parser.parse_args()
 
-    # Call the download function with the parsed arguments
-    process_dhs(args.parent_dir, args.config_file)
+    if args.dhs_data_dir[-1] != '/':
+        args.dhs_data_dir += r'/'
+
+    # call the download function with the parsed arguments
+    process_dhs(args.dhs_data_dir)
 
 
 if __name__ == "__main__":
