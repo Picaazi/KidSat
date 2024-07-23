@@ -27,13 +27,12 @@ Functions:
         Returns:
             pd.DataFrame, pd.DataFrame/bool: The dhs data and, the poverty data with deprivation indicators or False.
 
-    process_dhs(parent_dir: str, config_file: str) -> None
+    process_dhs(parent_dir: str) -> None
         Uses the get_poverty() function to get DHS data and poverty deprivation indicators, aggregates to the cluster level.
         Adds GPS data, saves as a CSV and saves data in train and test folds.
 
         Parameters:
             parent_dir (str): The path to the directory containing the DHS data files.
-            config_file (str): The path to the JSON file containing the config information.
 
         Returns:
             None
