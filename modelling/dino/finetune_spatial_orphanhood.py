@@ -24,8 +24,7 @@ This spatial data is stored in survey_processing/processed_data and is split int
 View survey_processing/main.py for more information on this
 
 Dinov2's input is a RGB satellite image converted to a tensor
-The target for each satellite image is several dhs variables (predict_target variable)
-These variables once one-hot encoded form a larger dimension vector
+The target for each satellite image is hv111 and hv113 (lost a mother, lost a father)
 The DinoV2 model outputs a 768 dimension vector, so we add an additional linear layer with sigmoid activation function
 in order to get an output the size of our target vector
 
@@ -76,8 +75,7 @@ def main(fold, model_name, imagery_path, imagery_source, emb_size, batch_size, n
     data_folder = r'survey_processing/processed_data'
 
     # load preprocessed dhs data of the fold we are considering, we will take target columns from this
-    train_df = pd.read_csv(f'{data_folder}/train_fold_{fold}.csv', index_col=0)
-    test_df = pd.read_csv(f'{data_folder}/test_fold_{fold}.csv', index_col=0)
+    train_df = pd.read_csv(f'{data_folder}/train_fold_{fold}.csv') #DELETED
 
     # store file paths of all available imagery in following list
     available_imagery = []
@@ -88,10 +86,12 @@ def main(fold, model_name, imagery_path, imagery_source, emb_size, batch_size, n
                 available_imagery.append(os.path.join(imagery_path, d, f))
     
     # gets filename of each image without the .fileformat
-    available_centroids = [f.split('/')[-1][:-4] for f in available_imagery]
+    print(available_imagery[0])
+    available_centroids = [f.split('\\')[-1][:-4] for f in available_imagery]
+    print(available_centroids[0])
     # filter df to remove rows with no corresponding satellite image
     train_df = train_df[train_df['CENTROID_ID'].isin(available_centroids)]
-    test_df = test_df[test_df['CENTROID_ID'].isin(available_centroids)]
+    print(train_df.head())
 
 
     def filter_contains(query):
@@ -112,10 +112,8 @@ def main(fold, model_name, imagery_path, imagery_source, emb_size, batch_size, n
 
     # add file path of satellite imagery corresponding to each row
     train_df['imagery_path'] = train_df['CENTROID_ID'].apply(filter_contains)
-    test_df['imagery_path'] = test_df['CENTROID_ID'].apply(filter_contains)
 
-    # dhs variables to use as target data
-    # orphanhood related variables
+    # dhs orphanhood variables to use as target data
     predict_target = ["hv111", "hv113"]
 
     # find one hot encoded columns associated with each of the categorical targets using regex
@@ -127,23 +125,6 @@ def main(fold, model_name, imagery_path, imagery_source, emb_size, batch_size, n
     # Drop rows with NaN values in the filtered subset of columns
     train_df = train_df.dropna(subset=filtered_predict_target)
     predict_target = sorted(filtered_predict_target)
-
-
-    def load_and_preprocess_image(path):
-        with rasterio.open(path) as src:
-            # Read the specific bands (4, 3, 2 for RGB)
-            r = src.read(4)  # Band 4 for Red
-            g = src.read(3)  # Band 3 for Green
-            b = src.read(2)  # Band 2 for Blue
-            
-            # Stack and normalize the bands
-            img = np.dstack((r, g, b))
-            img = img / normalization*255.  # Normalize to [0, 1] (if required)
-            
-        img = np.nan_to_num(img, nan=0, posinf=255, neginf=0)
-        img = np.clip(img, 0, 255)  # Clip values to be within the 0-255 range
-        
-        return img.astype(np.uint8)  # Convert to uint8
 
 
     def set_seed(seed):
@@ -162,31 +143,6 @@ def main(fold, model_name, imagery_path, imagery_source, emb_size, batch_size, n
 
     train, validation = train_test_split(train_df, test_size=0.2, random_state=42)
 
-
-    class CustomDataset(Dataset):
-        """
-        Stores DataFrame and transforms
-        When object is indexed returns satellite image converted to a tensor and target data from DataFrame
-        """
-
-        def __init__(self, dataframe, transform):
-            self.dataframe = dataframe
-            self.transform = transform
-
-        def __len__(self):
-            return len(self.dataframe)
-
-        def __getitem__(self, idx):
-            item = self.dataframe.iloc[idx]
-            image = load_and_preprocess_image(item['imagery_path'])
-            # Apply feature extractor if necessary, might need adjustments
-            image_tensor = self.transform(Image.fromarray(image))
-            
-            # Assuming your target is a single scalar
-            target = torch.tensor(item[predict_target], dtype=torch.float32)
-            return image_tensor, target  # Adjust based on actual output of feature_extractor
-
-
     # transforms to be used to prepare satellite images for model
     transform = transforms.Compose([
         transforms.Resize((imagery_size, imagery_size)),  # Resize the image to the input size expected by the model
@@ -194,11 +150,12 @@ def main(fold, model_name, imagery_path, imagery_source, emb_size, batch_size, n
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # Normalize with ImageNet's mean and std
     ])
 
-    train_dataset = CustomDataset(train, transform)
-    val_dataset = CustomDataset(validation, transform)
+    train_dataset = CustomDataset(train, transform, normalization, predict_target)
+    val_dataset = CustomDataset(validation, transform, normalization, predict_target)
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=batch_size+4)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=batch_size+4)
+    # CHANGED: num_workers=batch_size+4
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
 
     base_model = torch.hub.load('facebookresearch/dinov2', model_name)
 
@@ -265,6 +222,7 @@ def main(fold, model_name, imagery_path, imagery_source, emb_size, batch_size, n
         print('Training...')
 
         for batch in tqdm(train_loader):
+            print("here")
             images, targets = batch
             images, targets = images.to(device), targets.to(device)
             
@@ -305,6 +263,50 @@ def main(fold, model_name, imagery_path, imagery_source, emb_size, batch_size, n
             best_error = mean_val_loss
         print(f'Epoch [{epoch+1}/{num_epochs}], Validation Loss: {mean_val_loss}, Individual Loss: {mean_indiv_loss}')
         save_checkpoint(model, optimizer, epoch, mean_val_loss, filename=last_model)
+
+
+def load_and_preprocess_image(path, normalization):
+    with rasterio.open(path) as src:
+        # Read the specific bands (4, 3, 2 for RGB)
+        r = src.read(4)  # Band 4 for Red
+        g = src.read(3)  # Band 3 for Green
+        b = src.read(2)  # Band 2 for Blue
+        
+        # Stack and normalize the bands
+        img = np.dstack((r, g, b))
+        img = img / normalization*255.  # Normalize to [0, 1] (if required)
+        
+    img = np.nan_to_num(img, nan=0, posinf=255, neginf=0)
+    img = np.clip(img, 0, 255)  # Clip values to be within the 0-255 range
+    
+    return img.astype(np.uint8)  # Convert to uint8
+
+
+class CustomDataset(Dataset):
+    """
+    Stores DataFrame and transforms
+    When object is indexed returns satellite image converted to a tensor and target data from DataFrame
+    """
+
+    def __init__(self, dataframe, transform, normalization, predict_target):
+        self.dataframe = dataframe
+        self.transform = transform
+        self.normalization = normalization
+        self.predict_target = predict_target
+
+    def __len__(self):
+        return len(self.dataframe)
+
+    def __getitem__(self, idx):
+        item = self.dataframe.iloc[idx]
+        image = load_and_preprocess_image(item['imagery_path'], self.normalization)
+        # Apply feature extractor if necessary, might need adjustments
+        image_tensor = self.transform(Image.fromarray(image))
+        
+        # Assuming your target is a single scalar
+        target = torch.tensor(item[self.predict_target], dtype=torch.float32)
+        return image_tensor, target  # Adjust based on actual output of feature_extractor
+
 
 
 # handle command line inputs, note we have to run a seperate command to train on each fold
