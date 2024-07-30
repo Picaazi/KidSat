@@ -76,14 +76,11 @@ def evaluate(fold, use_checkpoint = False, imagery_path = None, imagery_source =
     # load train and test data from specified fold, or from pre/post 2020 data
     data_folder = r'survey_processing/processed_data/'
     if mode == 'spatial':
-        train_df = pd.read_csv(f'{data_folder}train_fold_{fold}.csv', index_col=0)
-        test_df = pd.read_csv(f'{data_folder}test_fold_{fold}.csv', index_col=0)
+        train_df = pd.read_csv(f'{data_folder}train_fold_{fold}.csv')
+        test_df = pd.read_csv(f'{data_folder}test_fold_{fold}.csv')
     elif mode == 'temporal':
-        train_df = pd.read_csv(f'{data_folder}before_2020.csv', index_col=0)
-        test_df = pd.read_csv(f'{data_folder}after_2020.csv', index_col=0)
-
-    # add orphaned column to df
-    # DO IT
+        train_df = pd.read_csv(f'{data_folder}before_2020.csv')
+        test_df = pd.read_csv(f'{data_folder}after_2020.csv')
 
     # store file paths of all available imagery in following list
     available_imagery = []
@@ -122,23 +119,6 @@ def evaluate(fold, use_checkpoint = False, imagery_path = None, imagery_source =
     train_df = train_df[train_df['orphaned'].notna()]
     test_df['imagery_path'] = test_df['CENTROID_ID'].apply(filter_contains)
     test_df = test_df[test_df['orphaned'].notna()]
-
-
-    def load_and_preprocess_image(path):
-        with rasterio.open(path) as src:
-            # Read the specific bands (4, 3, 2 for RGB)
-            r = src.read(4)  # Band 4 for Red
-            g = src.read(3)  # Band 3 for Green
-            b = src.read(2)  # Band 2 for Blue
-            # Stack and normalize the bands
-            img = np.dstack((r, g, b))
-            img = img / normalization*255.  # Normalize to [0, 1] (if required)
-            
-        img = np.nan_to_num(img, nan=0, posinf=255, neginf=0)
-        img = np.clip(img, 0, 255)  # Clip values to be within the 0-255 range
-        
-        return img.astype(np.uint8)  # Convert to uint8
-
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     base_model = torch.hub.load('facebookresearch/dinov2', f'dinov2_vitb14')
@@ -195,7 +175,7 @@ def evaluate(fold, use_checkpoint = False, imagery_path = None, imagery_source =
         
         for idx in tqdm(range(len(df))):
             # convert image to tensor
-            image = load_and_preprocess_image(df.iloc[idx]['imagery_path'])
+            image = load_and_preprocess_image(df.iloc[idx]['imagery_path'], normalization)
             image_tensor = transform(Image.fromarray(image))
 
             # evaluate model, with no gradient calculations to increase speed
@@ -236,6 +216,22 @@ def evaluate(fold, use_checkpoint = False, imagery_path = None, imagery_source =
 
     print("Mean Absolute Error on Test Set:", mae)
     return mae
+
+
+def load_and_preprocess_image(path, normalization):
+    with rasterio.open(path) as src:
+        # Read the specific bands (4, 3, 2 for RGB)
+        r = src.read(4)  # Band 4 for Red
+        g = src.read(3)  # Band 3 for Green
+        b = src.read(2)  # Band 2 for Blue
+        # Stack and normalize the bands
+        img = np.dstack((r, g, b))
+        img = img / normalization*255.  # Normalize to [0, 1] (if required)
+        
+    img = np.nan_to_num(img, nan=0, posinf=255, neginf=0)
+    img = np.clip(img, 0, 255)  # Clip values to be within the 0-255 range
+    
+    return img.astype(np.uint8)  # Convert to uint8
 
 
 # handle command line inputs

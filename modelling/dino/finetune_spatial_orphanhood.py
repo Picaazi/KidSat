@@ -87,7 +87,7 @@ def main(fold, model_name, imagery_path, imagery_source, emb_size, batch_size, n
     
     # gets filename of each image without the .fileformat
     print(available_imagery[0])
-    available_centroids = [f.split('\\')[-1][:-4] for f in available_imagery]
+    available_centroids = [f.split('/')[-1][:-4] for f in available_imagery]
     print(available_centroids[0])
     # filter df to remove rows with no corresponding satellite image
     train_df = train_df[train_df['CENTROID_ID'].isin(available_centroids)]
@@ -153,9 +153,8 @@ def main(fold, model_name, imagery_path, imagery_source, emb_size, batch_size, n
     train_dataset = CustomDataset(train, transform, normalization, predict_target)
     val_dataset = CustomDataset(validation, transform, normalization, predict_target)
 
-    # CHANGED: num_workers=batch_size+4
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=batch_size+4)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=batch_size+4)
 
     base_model = torch.hub.load('facebookresearch/dinov2', model_name)
 
