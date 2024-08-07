@@ -1,4 +1,4 @@
-## KidSatExt
+# KidSatExt
 We have two aims with this extension of the KidSat project:
 1. Improve the structure and commenting of some of the code from the KidSat project
 2. Use the DinoV2 model to predict orphanhood (as a proportion, and later as a count) in Zambia in 2018, 2020 and 2023. With the aim to compare this to data 
@@ -9,7 +9,17 @@ If you are viewing this from the KidSat project, these are the main changes that
 2. Tidied up, restructured and commented several files. As one example, I've commented and restructured evaluate_orphanhood.py, which is the counterpart to evaluate.py from the KidSat project. This file only needs a couple of small changes to be used for predicting child deprivation for the KidSat project.
 3. Added a more in-depth set of instructions for getting all the data, setting up the google cloud compute engine, training the model and getting predictions and orphanhood maps.
 
-# Instructions
+## Instructions
+
+### DHS data
+
+### Satellite Imagery
+
+### Google Cloud
+
+### Dino Model Training
+
+### Next Steps
 
 First using just orphanhood as our training labels. Secondly using orphanhood + the 99 dimension child deprivation vector.
 
