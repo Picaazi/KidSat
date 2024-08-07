@@ -6,7 +6,7 @@ import numpy as np
 # let's iterate through the dataframe 3000 at a time
 # doing up to 3000
 df = pd.read_csv("C:/Users/jgidn/Documents/Summer Project/KidSatExt/imagery_scraping/zambia_grid_center_points.csv")
-df = df.iloc[3058:6058]
+df = df.iloc[6059:]
 df.to_csv("C:/Users/jgidn/Documents/Summer Project/KidSatExt/imagery_scraping/zambia_grid_center_points_snippet.csv", index=False)
 
 
