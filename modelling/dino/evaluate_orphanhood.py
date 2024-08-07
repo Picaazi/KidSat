@@ -7,6 +7,7 @@ import numpy as np
 import torchvision.transforms as transforms
 import os
 import pandas as pd
+import pickle
 
 from tqdm import tqdm
 from sklearn.pipeline import make_pipeline
@@ -207,6 +208,14 @@ def evaluate(fold, use_checkpoint = False, imagery_path = None, imagery_source =
 
     # Fit the model
     pipeline.fit(train_features_df, train_target)
+
+    # Save model params in a json file
+    weights = pipeline[1].coef_
+    intercept = pipeline[1].intercept_
+    params_dict = {"weights" : weights, "intercept" : intercept}
+    file_path = f"modelling/dino/model/ridge_regr_weights_fold_{fold}"
+    with open(file_path, "wb") as f:
+        pickle.dump(params_dict, f)
 
     # Predict on test data
     y_pred = pipeline.predict(test_features_df)

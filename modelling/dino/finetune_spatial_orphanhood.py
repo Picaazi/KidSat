@@ -221,7 +221,6 @@ def main(fold, model_name, imagery_path, imagery_source, emb_size, batch_size, n
         print('Training...')
 
         for batch in tqdm(train_loader):
-            print("here")
             images, targets = batch
             images, targets = images.to(device), targets.to(device)
             
