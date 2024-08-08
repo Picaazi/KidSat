@@ -87,11 +87,11 @@ The model's learned parameters, as well as the ridge regression parameters are s
 
 ### Next Steps
 
-We can now choose the best trained Dino model. We can use ```modelling/dino/predict_orphanhood.py``` to get orphanhood predictions in the form of a ```DataFrame``` with columns ```lat, lon, orphaned```. To predict orphanhood for a certain country, we need to download more satellite imagery, covering the whole country. Follow all the previous steps to do this, but it is recommend to store the images at ```KidSatExt/prediction_data/imagery_folder_name```. Then run the following command:
+We can now choose the best trained Dino model. We can use ```modelling/dino/predict_orphanhood.py``` to get orphanhood predictions in the form of a ```DataFrame``` with columns ```lat, lon, orphaned```. To predict orphanhood for a certain country, we need to download more satellite imagery, covering the whole country. Follow all the previous steps to do this, but it is recommend to store the images at ```prediction_data/imagery_folder_name```. Then run the following command:
 ```
 python modelling/dino/predict_orphanhood.py various_command_line_options
 ```
-These predictions are stored at ``````.
+These predictions are stored at ```prediction_data/orphanhood_predictions.csv```.
 
-We can then run the Python Notebook `````` to get a choropleth map of orphanhood. This file is currently configured to create an orphanhood map for Zambia, but other maps can be made by downloading the appropriate map file from ``````.
+We can then run the Python Notebook ```create_choropleth_map.ipynb``` to get a choropleth map of orphanhood. This file is currently configured to create an orphanhood map for Zambia, but other maps can be made by downloading the appropriate map file from ```https://gadm.org/```.
 
