@@ -45,11 +45,11 @@ The resulting training and test data for our models will be stored in ```survey_
 
 We now need to download the satellite imagery at each of the clusters in the DHS data. For this project we have typically used 10km x 10km images, this is partially due to the jitter of the DHS data. If you are lucky, someone will have done this for you, i.e safely stored on the MLGH google drive. Otherwise you will need to extract the coordinates for each of the clusters using ```geopandas``` on the geographic Shape files. These coordinates will need to be stored in a ```DataFrame``` with columns ```name, lat, lon``` where ```name``` is the cluster ID. 
 
-To download these satellite images you will need to code a very short script utilising ```imagery_scraping/download_imagery.py```. Firstly, update the GEE project name in the config file ```imagery_scraping/config/google_config.json```. Then you only need to load the ```DataFrame``` mentioned above for each survey, and call the ```download_imagery()``` function from ```download_imagery.py```. GEE caps the number of requests to 3000 at a time, so you will need to run the script repeatedly. It is recommended to store these satellite images at ```KidSatExt/imagery```, but this is not required.
+To download these satellite images you will need to code a very short script utilising ```imagery_scraping/download_imagery.py```. Firstly, update the GEE project name in the config file ```imagery_scraping/config/google_config.json```. Then you only need to load the ```DataFrame``` mentioned above for each survey, and call the ```download_imagery()``` function from ```download_imagery.py```. GEE caps the number of requests to 3000 at a time, so you will need to run the script repeatedly. You may wish to use the python ```OS``` module to count the files you have download to check none are missed. It is recommended to store these satellite images at ```KidSatExt/imagery```, but this is not required.
 
 ### Google Cloud
 
-To train our Dino model, it is necessary to utilise Google Cloud's Compute Engine. To setup this VM, follow these steps:
+To train our Dino model, it is necessary to utilise Google Cloud's Compute Engine. To create this VM and transfer our data to the cloud, follow these steps:
 1. Create a project in GCP. If you are not the owner, grant yourself the appropriate IAM permissions.
 1. Go to Compute Engine, select Create VM Instance.
 2. Select any region, I have personally found Asia-SouthEast to have the most available GPUs.
@@ -59,6 +59,14 @@ To train our Dino model, it is necessary to utilise Google Cloud's Compute Engin
 6. Under Cloud Storage, create a Cloud Bucket, this is where we will upload our imagery and training/test data.
 7. Upload to this by manually downloading to your local computer, then selecting Upload on the Cloud Bucket.
 8. Alternatively, if the data is stored in a google drive you can using ```gcloud storage``` or ```gsutil``` to copy the files to the Bucket.
+9. This can be done in google collab by mounting the google drive, and running the commands ```gcloud init```, ```gcloud storage ls``` and ```gcloud storage cp -r drive_folder cloud_bucket```.
+
+Now follow these instructions to setup the VM from the command line:
+1. Python, git etc should be already installed so begin by cloning KidSatExt.
+2. The Deep Learning VM uses a conda virutal environment, install the modules from ```requirements.txt```.
+3. Copy the data in ```processed_data``` from the Cloud Bucket to the VM using ```gcloud storage```.
+To load the imagery when training the dino model, we need each images file path. The images can either be copied to the VM from the Bucket, or to a disk drive that can be attached to the VM. It is possible to load the images directly from the Cloud Bucket, this will require some adaptations to the code in ```modelling/dino```.
+4. Copy the imagery to the VM/attached disk, or adapt the code.
 
 ### Dino Model Training
 
