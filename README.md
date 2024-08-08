@@ -45,9 +45,20 @@ The resulting training and test data for our models will be stored in ```survey_
 
 We now need to download the satellite imagery at each of the clusters in the DHS data. For this project we have typically used 10km x 10km images, this is partially due to the jitter of the DHS data. If you are lucky, someone will have done this for you, i.e safely stored on the MLGH google drive. Otherwise you will need to extract the coordinates for each of the clusters using ```geopandas``` on the geographic Shape files. These coordinates will need to be stored in a ```DataFrame``` with columns ```name, lat, lon``` where ```name``` is the cluster ID. 
 
-To download these satellite images you will need to code a very short script utilising ```imagery_scraping/download_imagery.py```. Firstly, update the GEE project name in the config file ```imagery_scraping/config/google_config.json```. Then you only need to load the ```DataFrame``` mentioned above for each survey, and call the ```download_imagery()``` function from ```download_imagery.py```. GEE caps the number of requests to 3000 at a time, so you will need to run the script repeatedly in batches.
+To download these satellite images you will need to code a very short script utilising ```imagery_scraping/download_imagery.py```. Firstly, update the GEE project name in the config file ```imagery_scraping/config/google_config.json```. Then you only need to load the ```DataFrame``` mentioned above for each survey, and call the ```download_imagery()``` function from ```download_imagery.py```. GEE caps the number of requests to 3000 at a time, so you will need to run the script repeatedly. It is recommended to store these satellite images at ```KidSatExt/imagery```, but this is not required.
 
 ### Google Cloud
+
+To train our Dino model, it is necessary to utilise Google Cloud's Compute Engine. To setup this VM, follow these steps:
+1. Create a project in GCP. If you are not the owner, grant yourself the appropriate IAM permissions.
+1. Go to Compute Engine, select Create VM Instance.
+2. Select any region, I have personally found Asia-SouthEast to have the most available GPUs.
+3. On machine configuration, select GPU, then A100 40GB.
+4. Increase the size of the boot disk and change the OS to Deep Learning VM with CUDA 11.8 M124 (Debian 11, Python 3.10). The important thing is making sure CUDA, torch and torchvision's versions are compatible.
+5. Either allow full access to all Cloud API's or manually allow them after this setup.
+6. Under Cloud Storage, create a Cloud Bucket, this is where we will upload our imagery and training/test data.
+7. Upload to this by manually downloading to your local computer, then selecting Upload on the Cloud Bucket.
+8. Alternatively, if the data is stored in a google drive you can using ```gcloud storage``` or ```gsutil``` to copy the files to the Bucket.
 
 ### Dino Model Training
 
