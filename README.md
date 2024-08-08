@@ -35,8 +35,10 @@ dhs_data
     ...
   ...
 ```
-Now in order to create the poverty variables, aggregate the data to the cluster level, split the data into 5 folds and into a pre/post 2020 fold, we need to run ```survey_processing/main.py``` by the following command: <br/>
-    ```python survey_processing.py config_options_i_plan_to_change```<br/>
+Now in order to create the poverty variables, aggregate the data to the cluster level, split the data into 5 folds and into a pre/post 2020 fold, we need to run ```survey_processing/main.py``` by the following command:
+```
+python survey_processing.py config_options_i_plan_to_change
+```
 The resulting training and test data for our models will be stored in ```survey_processing/processed_data```.
 
 ### Satellite Imagery
