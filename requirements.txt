@@ -11,3 +11,5 @@ geopandas==0.13.2
 mosaiks==1.0.1
 dask==2023.7.0
 imageio
+pykrige
+plotly
