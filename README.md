@@ -56,7 +56,7 @@ To train our Dino model, it is necessary to utilise Google Cloud's Compute Engin
 3. On machine configuration, select GPU, then A100 40GB.
 4. Increase the size of the boot disk and change the OS to Deep Learning VM with CUDA 11.8 M124 (Debian 11, Python 3.10). The important thing is making sure CUDA, torch and torchvision's versions are compatible.
 5. Either allow full access to all Cloud API's or manually allow them after this setup.
-6. Under Cloud Storage, create a Cloud Bucket, this is where we will upload our imagery and training/test data.
+6. Under Cloud Storage, create a Cloud Bucket, this is where we will upload our imagery and training/test data. Make sure it is created in the same region as the VM.
 7. Upload to this by manually downloading to your local computer, then selecting Upload on the Cloud Bucket.
 8. Alternatively, if the data is stored in a google drive you can using ```gcloud storage``` or ```gsutil``` to copy the files to the Bucket.
 9. This can be done in google collab by mounting the google drive, and running the commands ```gcloud init```, ```gcloud storage ls``` and ```gcloud storage cp -r drive_folder cloud_bucket```.
@@ -65,8 +65,7 @@ Now follow these instructions to setup the VM from the command line:
 1. Python, git etc should be already installed so begin by cloning KidSatExt.
 2. The Deep Learning VM uses a conda virutal environment, install the modules from ```requirements.txt```.
 3. Copy the data in ```processed_data``` from the Cloud Bucket to the VM using ```gcloud storage```.
-To load the imagery when training the dino model, we need each images file path. The images can either be copied to the VM from the Bucket, or to a disk drive that can be attached to the VM. It is possible to load the images directly from the Cloud Bucket, this will require some adaptations to the code in ```modelling/dino```.
-4. Copy the imagery to the VM/attached disk, or adapt the code.
+4. To load the imagery when training the dino model, we need each images file path. The images can either be copied to the VM from the Bucket, or to a disk drive that can be attached to the VM. It is possible to load the images directly from the Cloud Bucket, this will require some adaptations to the code in ```modelling/dino```.
 
 ### Dino Model Training
 
