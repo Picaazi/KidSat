@@ -20,8 +20,8 @@ Here is an overall description of how we plan to predict orphanhood:
 ## Instructions
 
 ### DHS data
-First register for access to the DHS data in the necessary countries. For each country and year download all the Stata files, alongside the Geographic data (Shape file). This must be done manually, not via the bulk download manager. Store this data at '''survey_processing/dhs_data'''. The file structure should be as follows:
-'''
+First register for access to the DHS data in the necessary countries. For each country and year download all the Stata files, alongside the Geographic data (Shape file). This must be done manually, not via the bulk download manager. Store this data at ```survey_processing/dhs_data```. The file structure should be as follows:
+```
 dhs_data
   AO_2015_DHS_XXX...
     AOPR71DT
@@ -30,7 +30,7 @@ dhs_data
   ET_2005_DHS_XXX...
     ...
   ...
-'''
+```
 
 ### Satellite Imagery
 
