@@ -62,7 +62,7 @@ To train our Dino model, it is necessary to utilise Google Cloud's Compute Engin
 9. This can be done in Google Collab by mounting the Google Drive, and running the commands ```gcloud init```, ```gcloud storage ls``` and ```gcloud storage cp -r drive_folder cloud_bucket```.
 
 Now follow these instructions to setup the VM from the command line:
-1. Python, git etc should be already installed so begin by cloning KidSatExt.
+1. Python, git etc should be already installed so begin by cloning the KidSatExt repository.
 2. The Deep Learning VM uses a conda virutal environment, install the modules from ```requirements.txt```.
 3. Copy the data in ```processed_data``` from the Cloud Bucket to the VM using ```gcloud storage```.
 4. To load the imagery when training the dino model, we need each images file path. The images can either be copied to the VM from the Bucket, or to a disk drive that can be attached to the VM. It is possible to load the images directly from the Cloud Bucket, this will require some adaptations to the code in ```modelling/dino```.
