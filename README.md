@@ -19,6 +19,10 @@ Here is an overall description of how we plan to predict orphanhood:
 
 ## Instructions
 
+### Intial Setup
+
+The data step is suitably quick to run on your local computer, or this can all be done on a VM on GCP. Create a virtual environment and install all the modules in the requirements.txt.
+
 ### DHS data
 First register for access to the DHS data in the necessary countries. For each country and year download all the Stata files, alongside the Geographic data (Shape file). This must be done manually, not via the bulk download manager. Store this data at ```survey_processing/dhs_data```. The file structure should be as follows:
 ```
@@ -31,6 +35,9 @@ dhs_data
     ...
   ...
 ```
+Now in order to create the poverty variables, aggregate the data to the cluster level, split the data into 5 folds and into a pre/post 2020 fold, we need to run ```survey_processing/main.py``` by the following command:
+```python survey_processing.py config_options_i_plan_to_change```
+The resulting training and test data for our models will be stored in ```survey_processing/processed_data```.
 
 ### Satellite Imagery
 
