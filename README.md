@@ -21,7 +21,7 @@ Here is an overall description of how we plan to predict orphanhood:
 
 ### Intial Setup
 
-The data step is suitably quick to run on your local computer, or this can all be done on a VM on GCP. Create a virtual environment and install all the modules in ```requirements.txt```.
+The data step is suitably quick to run on your local computer, or this can all be done on a VM on GCP. Create a virtual environment and install all the modules in ```requirements.txt```. Note that the code is currently configured to predict orphanhood in Zambia for under 16s.
 
 ### DHS data
 First register for access to the DHS data in the necessary countries. For each country and year download all the Stata files, alongside the Geographic data (Shape file). This must be done manually, not via the bulk download manager. Store this data at ```survey_processing/dhs_data```. The file structure should be as follows:
@@ -69,14 +69,22 @@ Now follow these instructions to setup the VM from the command line:
 
 ### Dino Model Training
 
+DinoV2 is a model that can be used for a range of computer vision tasks. It is created by Facebook and trained on millions of images. It can take varying size images as an input, although ideally all images should be the same size.  We can finetune this model on additional images.
+
+The model is trained in two stages. First we finetune the Dino model alone. The input to our model is a satellite image for a cluster. And the target data is either [the proportion of children who have lost a mother, ... lost a father], or this vector + the 99 dimension child poverty vector from the KidSat project. Then we add a ridge regression layer to the end of our Dino model, which will only output 1 value, orphanhood. This ridge regression layer is trained using the satellite imagery and the proportion of orphans in each cluster. One model is trained on each fold, and we will pick the best model out of the 5 at then end.
+
+To finetune the dino model we run the following command for all 5 of the folds:
+```
+python modelling/dino/finetune_spatial_orphanhood.py --fold 1 --model_name dinov2_vitb14 --imagery_path {path_to_parent_imagery_folder} --batch_size 1 --imagery_source S --num_epochs 10
+```
+
+To then fit the ridge regression layer, and output the error metrics on each of the folds, we run this command once:
+```
+python modelling/dino/evaluate_orphanhood.py --use_checkpoint --imagery_path {path_to_parent_imagery_folder} --imagery_source S --mode spatial
+```
+
+The model's learned parameters, as well as the ridge regression parameters are stored at ```modelling/dino/model```. 
+
 ### Next Steps
 
-First using just orphanhood as our training labels. Secondly using orphanhood + the 99 dimension child deprivation vector.
 
-Instructions for use:
-- install modules in requirements.txt
-- run main.py using the command 'python survey_processing/main.py path_to_dhs_survey_data'
-  (i need to change main.py so it just outputs Zambia data)
-- get the Zambia satellite images at each cluster
-- run finetune_spatial_orphanhood.py to train the Dino model
-- run evaluate_orphanhood.py to train the ridge regression layer of the Dino model and output predictions for orphanhood
