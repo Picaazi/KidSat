@@ -10,11 +10,11 @@ If you are viewing this from the KidSat project, these are the main changes that
 3. Added a more in-depth set of instructions for getting all the data, setting up the google cloud compute engine, training the model and getting predictions and orphanhood maps.
 
 Here is an overall description of how we plan to predict orphanhood:
-1. Get DHS data, use this to create our child deprivation indicators (we call poverty variables)
-2. Aggregate DHS data, poverty variables to the cluster level and combine with GPS data
-3. Associate a satellite image with each cluster
+1. Get DHS data, use this to create our child deprivation indicators (we call poverty variables).
+2. Aggregate DHS data, poverty variables to the cluster level and combine with GPS data.
+3. Associate a satellite image with each cluster.
 4. Finetune our DinoV2 model on the satellite imagery to predict [proportion of people who have lost a mother, ... lost a father], or this vector + the 99 dimension child deprivation vector from the KidSat project.
-5. Then we add a ridge regression layer to our DinoV2 model, and fit this regression layer with the satellite imagery but now trying to predict orphanhood.
+5. Then we add a ridge regression layer to our DinoV2 model that outputs one value, orphanhood. We fit this regression layer with the satellite imagery and orphanhood data.
 6. Now we can freely evaluate our model on a grid of satellite imagery covering a whole country, say Zambia and display a chorolopleth map of orphanhood.
 
 ## Instructions
