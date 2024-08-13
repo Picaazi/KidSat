@@ -27,6 +27,7 @@ If you wish to move straight on to the setup instructions, skip this next sectio
 1. Firstly the join I have changed in ```survey_processing/main.py``` now means that the data includes 6 - 18 year olds. There is a lot more data so the predictions from the KidSat paper could potentially be improved. Also, the 99 dimension vector from the KidSat paper mainly depends on data from the PR, and only a few variables from the KR (under 5s dataset). So these new 6 - 18 year olds will have enough data for to contribute towards the 99 dimension vector.
 2. I recommend to re-code ```survey_processing/main.py```. My main concern is that a lot of children are getting removed from the final dataset if they are missing only a few variables, and this is happening at multiple different points in the code, and also in the ```finetune_spatial.py``` code. I believe all the clusters have enough remaining children after the removals, but it is worth checking we don't have any tiny clusters.
 3. Mention I have run the model for orphanhood, potentially overfit, we need to output MSE, MAPE, R2 as well as MAE, why is the batch size only 1, how were the hyperparameters chosen, show the predictions here
+4. RGB only vs not images need to be read differently, as one has 3 bands and the other has a lot more
 
 ## Instructions
 
