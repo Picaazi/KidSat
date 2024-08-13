@@ -10,6 +10,8 @@ If you are viewing this from the KidSat project, these are the main changes that
 3. Added code to predict orphanhood.
 4. Added a more in-depth set of instructions for getting all the data, setting up the google cloud compute engine, training the model and getting predictions and orphanhood maps.
 
+My more detailed finding are found in the next section.
+
 Here is an overall description of how we plan to predict orphanhood:
 1. Get DHS data, use this to create our child deprivation indicators (we call poverty variables).
 2. Aggregate DHS data, poverty variables to the cluster level and combine with GPS data.
@@ -18,10 +20,13 @@ Here is an overall description of how we plan to predict orphanhood:
 5. Then we add a ridge regression layer to our DinoV2 model that outputs one value, orphanhood. We fit this regression layer with the satellite imagery and orphanhood data.
 6. Now we can freely evaluate our model on a grid of satellite imagery covering a whole country, say Zambia and display a chorolopleth map of orphanhood.
 
+If you wish to move straight on to the setup instructions, skip this next section.
+
 ### My Findings and Recommended Changes for the KidSat Paper
 
 1. Firstly the join I have changed in ```survey_processing/main.py``` now means that the data includes 6 - 18 year olds. There is a lot more data so the predictions from the KidSat paper could potentially be improved. Also, the 99 dimension vector from the KidSat paper mainly depends on data from the PR, and only a few variables from the KR (under 5s dataset). So these new 6 - 18 year olds will have enough data for to contribute towards the 99 dimension vector.
 2. I recommend to re-code ```survey_processing/main.py```. My main concern is that a lot of children are getting removed from the final dataset if they are missing only a few variables, and this is happening at multiple different points in the code, and also in the ```finetune_spatial.py``` code. I believe all the clusters have enough remaining children after the removals, but it is worth checking we don't have any tiny clusters.
+3. Mention I have run the model for orphanhood, potentially overfit, we need to output MSE, MAPE, R2 as well as MAE, why is the batch size only 1, how were the hyperparameters chosen, show the predictions here
 
 ## Instructions
 
