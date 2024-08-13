@@ -7,7 +7,8 @@ we have in the Sinazongwe District.
 If you are viewing this from the KidSat project, these are the main changes that I have made:
 1. Changed the joins of the KR, IR and PR, and tidied up the code of ```survey_processing/main.py``` so that children from 6 to 18 are now included in the training data for the models.
 2. Tidied up, restructured and commented several files. As one example, I've commented and restructured ```evaluate_orphanhood.py```, which is the counterpart to ```evaluate.py``` from the KidSat project. This file only needs a couple of small changes to be used for predicting child deprivation for the KidSat project.
-3. Added a more in-depth set of instructions for getting all the data, setting up the google cloud compute engine, training the model and getting predictions and orphanhood maps.
+3. Added code to predict orphanhood.
+4. Added a more in-depth set of instructions for getting all the data, setting up the google cloud compute engine, training the model and getting predictions and orphanhood maps.
 
 Here is an overall description of how we plan to predict orphanhood:
 1. Get DHS data, use this to create our child deprivation indicators (we call poverty variables).
@@ -16,6 +17,11 @@ Here is an overall description of how we plan to predict orphanhood:
 4. Finetune our DinoV2 model on the satellite imagery to predict [proportion of people who have lost a mother, ... lost a father], or this vector + the 99 dimension child deprivation vector from the KidSat project.
 5. Then we add a ridge regression layer to our DinoV2 model that outputs one value, orphanhood. We fit this regression layer with the satellite imagery and orphanhood data.
 6. Now we can freely evaluate our model on a grid of satellite imagery covering a whole country, say Zambia and display a chorolopleth map of orphanhood.
+
+### My Findings and Recommended Changes for the KidSat Paper
+
+1. Firstly the join I have changed in ```survey_processing/main.py``` now means that the data includes 6 - 18 year olds. There is a lot more data so the predictions from the KidSat paper could potentially be improved. Also, the 99 dimension vector from the KidSat paper mainly depends on data from the PR, and only a few variables from the KR (under 5s dataset). So these new 6 - 18 year olds will have enough data for to contribute towards the 99 dimension vector.
+2. I recommend to re-code ```survey_processing/main.py```. My main concern is that a lot of children are getting removed from the final dataset if they are missing only a few variables, and this is happening at multiple different points in the code, and also in the ```finetune_spatial.py``` code. I believe all the clusters have enough remaining children after the removals, but it is worth checking we don't have any tiny clusters.
 
 ## Instructions
 
@@ -96,8 +102,3 @@ python modelling/dino/predict_orphanhood.py --use_checkpoint --imagery_source S 
 These predictions are then stored at ```prediction_data/orphanhood_predictions_fold_i.csv```.
 
 We can then plot the true values vs the predictions if available or run the Python Notebook ```create_choropleth_map.ipynb``` to get a choropleth map of orphanhood. This file is currently configured to create an orphanhood map for Zambia, but other maps can be made by downloading the appropriate map file from ```https://gadm.org/```.
-
-### My findings
-
-
-
