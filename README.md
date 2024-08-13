@@ -10,7 +10,7 @@ If you are viewing this from the KidSat project, these are the main changes that
 3. Added code to predict orphanhood.
 4. Added a more in-depth set of instructions for getting all the data, setting up the google cloud compute engine, training the model and getting predictions and orphanhood maps.
 
-My more detailed finding are found in the next section.
+My more detailed finding are found in the next subsection.
 
 Here is an overall description of how we plan to predict orphanhood:
 1. Get DHS data, use this to create our child deprivation indicators (we call poverty variables).
