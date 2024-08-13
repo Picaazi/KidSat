@@ -19,9 +19,9 @@ Here is an overall description of how we plan to predict orphanhood:
 
 ## Instructions
 
-### Intial Setup
+### Intial Setup and Important Notes
 
-The data step is suitably quick to run on your local computer, or this can all be done on a VM on GCP. Create a virtual environment and install all the modules in ```requirements.txt```. Note that the code is currently configured to predict orphanhood in Zambia for under 16s.
+The data step is suitably quick to run on your local computer, or this can all be done on a VM on GCP. Create a virtual environment and install all the modules in ```requirements.txt```. Note that some of the code made need some slight changes to work with Landsat imagery and for temporal analysis (I believe just predict_orphanhood.py needs to be changed). Also note that if the file and folder names differ from the ones described below then some of the code may need to be adapted. This is because I have not had time to complete this.
 
 ### DHS data
 First register for access to the DHS data in the necessary countries. For each country and year download all the Stata files, alongside the Geographic data (Shape file). This must be done manually, not via the bulk download manager. Store this data at ```survey_processing/dhs_data```. The file structure should be as follows:
@@ -37,15 +37,15 @@ dhs_data
 ```
 Now in order to create the poverty variables, aggregate the data to the cluster level, split the data into 5 folds and into a pre/post 2020 fold, we need to run ```survey_processing/main.py``` by the following command:
 ```
-python survey_processing.py --dhs_data_dir dhs_data
+python survey_processing.py --dhs_data_dir {path_to_dhs_data}
 ```
 The resulting training and test data for our models will be stored in ```survey_processing/processed_data```.
 
 ### Satellite Imagery
 
-We now need to download the satellite imagery at each of the clusters in the DHS data. For this project we have typically used 10km x 10km images, this is partially due to the jitter of the DHS data. If you are lucky, someone will have done this for you, i.e safely stored on the MLGH Google Drive. Otherwise you will need to extract the coordinates for each of the clusters using ```geopandas``` on the geographic Shape files. These coordinates will need to be stored in a ```DataFrame``` with columns ```name, lat, lon``` where ```name``` is the cluster ID. 
+We now need to download the satellite imagery at each of the clusters in the DHS data. For this project we have typically used 10km x 10km images, this is partially due to the jitter of the DHS data. If you are lucky, someone will have done this for you, i.e safely stored on the MLGH Google Drive. Otherwise you will need to extract the coordinates for each of the clusters using ```geopandas``` on the geographic Shape files. These coordinates will need to be stored in a ```DataFrame``` with columns ```name, lat, lon``` where ```name``` is the cluster ID (i.e ZM201800000023). 
 
-To download these satellite images you will need to code a very short script utilising ```imagery_scraping/download_imagery.py```. Firstly, update the GEE project name in the config file ```imagery_scraping/config/google_config.json```. Then you only need to load the ```DataFrame``` mentioned above for each survey, and call the ```download_imagery()``` function from ```download_imagery.py```. GEE caps the number of requests to 3000 at a time, so you will need to run the script repeatedly. You may wish to use the python ```OS``` module to count the files you have download to check none are missed. It is recommended to store these satellite images at ```KidSatExt/imagery```, but this is not required.
+To download these satellite images you will need to code a very short script utilising ```imagery_scraping/download_imagery.py```. Firstly, update the GEE project name in the config file ```imagery_scraping/config/google_config.json```. Then you only need to load the ```DataFrame``` mentioned above for each survey, and call the ```download_imagery()``` function from ```download_imagery.py```. GEE caps the number of requests to 3000 at a time, so you will need to run the script repeatedly. You may wish to use the python ```OS``` module to count the files you have downloaded to check none are missed. It is recommended to store these satellite images in a folder called ```imagery```, but this is not required.
 
 ### Google Cloud
 
@@ -87,7 +87,7 @@ The model's learned parameters, as well as the ridge regression parameters are s
 
 ### Next Steps
 
-We can now choose the best trained Dino model. We can use ```modelling/dino/predict_orphanhood.py``` to get orphanhood predictions in the form of a ```DataFrame``` with columns ```lat, lon, orphaned```. To predict orphanhood for a certain country, we need to download more satellite imagery, covering the whole country. Follow all the previous steps to do this, but it is recommend to store the images at ```prediction_data/imagery_folder_name```. Then run the following command:
+We can now get some predictions. We can use ```modelling/dino/predict_orphanhood.py``` to get orphanhood predictions in the form of a ```DataFrame``` with columns ```name, lat, lon, orphaned, in_sample```. Where 'name' is the centroid ID and in_sample is an indicator variable of whether the image has been used to train the model. To predict orphanhood for a certain country, we need to download more satellite imagery, covering the whole country. Create a folder called ```prediction_data``` and follow all the previous steps to download the new imagery, store the images at ```prediction_data/imagery_folder_name```. Also store a ```DataFrame``` with columns ```name, lat, lon``` at the ```prediction_data''' folder. This should contain the coordinates of all the imager we have just downloaded. Then run the following command:
 ```
 python modelling/dino/predict_orphanhood.py --use_checkpoint --imagery_source S imagery_path {path_to_parent_imagery_folder} --data_path {path_to_imagery_coords_csv}
 ```
