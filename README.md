@@ -37,7 +37,7 @@ dhs_data
 ```
 Now in order to create the poverty variables, aggregate the data to the cluster level, split the data into 5 folds and into a pre/post 2020 fold, we need to run ```survey_processing/main.py``` by the following command:
 ```
-python survey_processing.py config_options_i_plan_to_change
+python survey_processing.py --dhs_data_dir dhs_data
 ```
 The resulting training and test data for our models will be stored in ```survey_processing/processed_data```.
 
@@ -89,7 +89,7 @@ The model's learned parameters, as well as the ridge regression parameters are s
 
 We can now choose the best trained Dino model. We can use ```modelling/dino/predict_orphanhood.py``` to get orphanhood predictions in the form of a ```DataFrame``` with columns ```lat, lon, orphaned```. To predict orphanhood for a certain country, we need to download more satellite imagery, covering the whole country. Follow all the previous steps to do this, but it is recommend to store the images at ```prediction_data/imagery_folder_name```. Then run the following command:
 ```
-python modelling/dino/predict_orphanhood.py various_command_line_options
+python modelling/dino/predict_orphanhood.py --use_checkpoint --imagery_source S imagery_path {path_to_parent_imagery_folder} --data_path {path_to_imagery_coords_csv}
 ```
 These predictions are stored at ```prediction_data/orphanhood_predictions.csv```.
 
