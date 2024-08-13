@@ -23,6 +23,8 @@ Here is an overall description of how we plan to predict orphanhood:
 
 The data step is suitably quick to run on your local computer, or this can all be done on a VM on GCP. Create a virtual environment and install all the modules in ```requirements.txt```. Note that some of the code made need some slight changes to work with Landsat imagery and for temporal analysis (I believe just predict_orphanhood.py needs to be changed). Also note that if the file and folder names differ from the ones described below then some of the code may need to be adapted. This is because I have not had time to complete this.
 
+In the MLGH GCP, the dinov2-zambia2 VM is already configured and there are cloud buckets available with all the Sentinel imagery, and all the DHS data. Furthermore, in the ```modelling/dino/model``` folder, we have the weights for the orphanhood Dino model. This model first predicts [hv111, hv113] and then predicts orphanhood. The model is trained on the Sentinel imagery for all the countries used in the KidSat project.
+
 ### DHS data
 First register for access to the DHS data in the necessary countries. For each country and year download all the Stata files, alongside the Geographic data (Shape file). This must be done manually, not via the bulk download manager. Store this data at ```survey_processing/dhs_data```. The file structure should be as follows:
 ```
@@ -87,11 +89,15 @@ The model's learned parameters, as well as the ridge regression parameters are s
 
 ### Next Steps
 
-We can now get some predictions. We can use ```modelling/dino/predict_orphanhood.py``` to get orphanhood predictions in the form of a ```DataFrame``` with columns ```name, lat, lon, orphaned, in_sample```. Where 'name' is the centroid ID and in_sample is an indicator variable of whether the image has been used to train the model. To predict orphanhood for a certain country, we need to download more satellite imagery, covering the whole country. Create a folder called ```prediction_data``` and follow all the previous steps to download the new imagery. Store the images at ```prediction_data/imagery_folder_name```. Also store a ```DataFrame``` with columns ```name, lat, lon``` in the ```prediction_data``` folder. This should contain the center coordinates of all the imagery we have just downloaded. Then run the following command:
+We can now get some predictions. We can use ```modelling/dino/predict_orphanhood.py``` to get orphanhood predictions in the form of a ```DataFrame``` with columns ```name, lat, lon, orphaned, in_sample```. Where 'name' is the centroid ID and 'in_sample' is an indicator variable of whether the image has been used to train the model. To predict orphanhood for a certain country, we need to download more satellite imagery, covering the whole country. Create a folder called ```prediction_data``` and follow all the previous steps to download the new imagery. Store the images at ```prediction_data/imagery_folder_name```. Also store a ```DataFrame``` with columns ```name, lat, lon``` in the ```prediction_data``` folder. This should contain the center coordinates of all the imagery we have just downloaded. Then run the following command:
 ```
 python modelling/dino/predict_orphanhood.py --use_checkpoint --imagery_source S imagery_path {path_to_parent_imagery_folder} --data_path {path_to_imagery_coords_csv}
 ```
-These predictions are stored at ```prediction_data/orphanhood_predictions.csv```.
+These predictions are then stored at ```prediction_data/orphanhood_predictions_fold_i.csv```.
 
-We can then run the Python Notebook ```create_choropleth_map.ipynb``` to get a choropleth map of orphanhood. This file is currently configured to create an orphanhood map for Zambia, but other maps can be made by downloading the appropriate map file from ```https://gadm.org/```.
+We can then plot the true values vs the predictions if available or run the Python Notebook ```create_choropleth_map.ipynb``` to get a choropleth map of orphanhood. This file is currently configured to create an orphanhood map for Zambia, but other maps can be made by downloading the appropriate map file from ```https://gadm.org/```.
+
+### My findings
+
+
 
