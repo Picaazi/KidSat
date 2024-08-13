@@ -784,7 +784,7 @@ def process_dhs(dhs_data_dir):
     merged_centroid_df = merged_centroid_df[merged_centroid_df["age"] < 16]
 
     # keep only Zambia data
-    merged_centroid_df = merged_centroid_df[merged_centroid_df["COUNTRY"] == "Zambia"]
+    # merged_centroid_df = merged_centroid_df[merged_centroid_df["COUNTRY"] == "Zambia"]
 
     # only want to scale certain columns
     no_scale_cols = ["CENTROID_ID", "SURVEY_NAME", "COUNTRY", "YEAR",
