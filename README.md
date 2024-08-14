@@ -16,7 +16,7 @@ Here is an overall description of how we plan to predict orphanhood:
 1. Get DHS data, use this to create our child deprivation indicators (we call poverty variables).
 2. Aggregate DHS data, poverty variables to the cluster level and combine with GPS data.
 3. Associate a satellite image with each cluster.
-4. Finetune our DinoV2 model on the satellite imagery to predict [proportion of people who have lost a mother, ... lost a father], or this vector + the 99 dimension child deprivation vector from the KidSat project.
+4. Finetune our DinoV2 model on the satellite imagery to predict the proportion of children who have lost a mother and the proportion of children who have lost a father, or this vector combined with the 99 dimension child deprivation vector from the KidSat project.
 5. Then we add a ridge regression layer to our DinoV2 model that outputs one value, orphanhood. We fit this regression layer with the satellite imagery and orphanhood data.
 6. Now we can freely evaluate our model on a grid of satellite imagery covering a whole country, say Zambia and display a chorolopleth map of orphanhood.
 
@@ -85,7 +85,7 @@ Now follow these instructions to setup the VM from the command line:
 
 DinoV2 is a model that can be used for a range of computer vision tasks. It is created by Facebook and trained on millions of images. It can take varying size images as an input, although ideally all images should be the same size.  We can finetune this model on additional images.
 
-The model is trained in two stages. First we finetune the Dino model alone. The input to our model is a satellite image for a cluster. And the target data is either [the proportion of children who have lost a mother, ... lost a father], or this vector + the 99 dimension child poverty vector from the KidSat project. Then we add a ridge regression layer to the end of our Dino model, which will only output 1 value, orphanhood. This ridge regression layer is trained using the satellite imagery and the proportion of orphans in each cluster. One model is trained on each fold.
+The model is trained in two stages. First we finetune the Dino model alone. The input to our model is a satellite image for a cluster. And the target data is either the proportion of children who have lost a mother and the proportion of children who have lost a father, or it's this vector combined with the 99 dimension child poverty vector from the KidSat project. Then we add a ridge regression layer to the end of our Dino model, which will only output 1 value, orphanhood. This ridge regression layer is trained using the satellite imagery and the proportion of orphans in each cluster. One model is trained on each fold.
 
 To finetune the dino model we run the following command for all 5 of the folds:
 ```
