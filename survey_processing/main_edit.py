@@ -66,15 +66,12 @@ from pandas.api.types import is_numeric_dtype
 warnings.filterwarnings('ignore')
 
 # parent directory of the processed data, config files and file to store min/max values
-# CHANGE file paths
-survey_proc_dir = r'Z:/Uni Work/Summer Project/KidSatExt/survey_processing/'
-cc_file = os.path.join(survey_proc_dir, "dhs_country_code.json")
-min_max_file = os.path.join(survey_proc_dir, "min_max_values.json")
-save_processed_dir = os.path.join(survey_proc_dir, "processed_data/")
-
+cc_file = os.path.join("survey_processing/dhs_country_code.json")
+min_max_file = os.path.join("survey_processing/min_max_values.json")
+save_processed_dir = os.path.join("survey_processing/processed_data/")
+config_file = os.path.join("survey_processing/processing_params.json")
 
 # load json config file
-config_file = os.path.join(survey_proc_dir, "processing_params.json")
 with open(config_file, 'r') as file:
     config_data = json.load(file)
 
@@ -673,42 +670,7 @@ def create_poverty_dataframe(df, path_to_save, save_csv=True):
     return df
 
 
-def get_dhs_pov_dfs():
-    pass
-
-def agg_preprocess_dhs_data():
-    pass
-
-def agg_preprocess_pov_dfs():
-    pass
-
-def get_geo_data():
-    pass
-
-
-def process_dhs(dhs_data_dir):
-    """
-    Creates DHS DataFrames and Poverty DataFrames using the get_poverty() function.
-    Aggregates these DataFrames to the cluster level and joins these DataFrames with the GPS data
-    Then saves and splits the data into train/test splits.
-
-    Parameters:
-        dhs_data_dir (str): The path to the directory containing the DHS data files.
-
-    Returns:
-        None
-    """
-
-    # get file paths of config files and where to save final processed data
-    if dhs_data_dir[-1]!='/':
-        dhs_data_dir += r'/'
-    
-    # check we have DHS data for each country in config file
-    print('Checking file integrity...')
-    if not check_file_integrity(dhs_data_dir, config_data['countries'], dhs_cc):
-        raise FileNotFoundError('DHS data incomplete')
-
-    # create DataFrames storing dhs data, and if possible create DataFrames with poverty deprivation indicators
+def get_dhs_and_pov_dfs(dhs_data_dir):
     pov_dfs = []
     dhs_dfs = []
     print('Creating DHS and Poverty DataFrames...')
@@ -718,8 +680,12 @@ def process_dhs(dhs_data_dir):
             dhs_dfs.append(dhs_df)
             if create_pov_df_flag:
                 pov_df = create_poverty_dataframe(dhs_df, dhs_data_dir + f + '/')
-                pov_dfs.append(pov_df)              
+                pov_dfs.append(pov_df)  
 
+    return dhs_dfs, pov_dfs
+
+
+def agg_dhs_dfs(dhs_dfs):
     # we will remove if variables are above these thresholds
     thresholds = config_data['thresholds']
     # categorical columns to one hot encode
@@ -770,7 +736,13 @@ def process_dhs(dhs_data_dir):
 
     # remove all cols not selected
     dhs_df_all = dhs_df_all[list(set(cols_to_select))]
+    # drop duplicates and reset index of dataframes before merge
+    dhs_df_all.drop_duplicates(inplace=True)
 
+    return dhs_df_all
+
+
+def agg_pov_dfs(pov_dfs):
     # group poverty data by cluster
     print('Aggregating poverty data...')
     poverty_dfs_agg = []
@@ -788,6 +760,13 @@ def process_dhs(dhs_data_dir):
     # vertically concat all poverty data
     pov_df_all = pd.concat(poverty_dfs_agg)
 
+    # drop duplicates for merge later
+    pov_df_all.drop_duplicates(inplace=True)
+
+    return pov_df_all
+
+
+def get_geo_data(dhs_data_dir):
     # get centroid data
     gdfs = []
     # iterate through all DHS surveys
@@ -818,27 +797,16 @@ def process_dhs(dhs_data_dir):
 
     # drop duplicates and reset index of dataframes before merge
     centroid_df.drop_duplicates(inplace=True)
-    pov_df_all.drop_duplicates(inplace=True)
-    dhs_df_all.drop_duplicates(inplace=True)
     centroid_df = centroid_df.reset_index(drop=True)
 
-    # merge dhs, poverty data and GPS data on centroid ID/id
-    merged_centroid_df = pd.merge(centroid_df, pov_df_all, left_on='CENTROID_ID', right_on='id', how='left')
-    merged_centroid_df = pd.merge(merged_centroid_df, dhs_df_all, left_on='CENTROID_ID', right_on='id', how='left')
+    return centroid_df
 
-    # remove some cols after join
-    merged_centroid_df = merged_centroid_df.drop(["hhid", "indid", "id_x", "id_y", "year_interview"], axis=1)
 
-    # remove all over 16s
-    merged_centroid_df = merged_centroid_df[merged_centroid_df["age"] < 16]
-
-    # keep only Zambia data
-    # merged_centroid_df = merged_centroid_df[merged_centroid_df["COUNTRY"] == "Zambia"]
-
+def min_max_scale(df):
     # only want to scale certain columns
     no_scale_cols = ["CENTROID_ID", "SURVEY_NAME", "COUNTRY", "YEAR",
                     "LATNUM", "LONGNUM", "cluster"]
-    df_subset = merged_centroid_df.drop(no_scale_cols, axis=1)
+    df_subset = df.drop(no_scale_cols, axis=1)
 
     # Remove columns if all values are NaN
     df_subset = df_subset.dropna(axis=1, how='all')
@@ -862,11 +830,53 @@ def process_dhs(dhs_data_dir):
     df_scaled = df_subset.apply(scale_column)
 
     # Combine the no scale cols with the scaled cols
-    df_processed = pd.concat([merged_centroid_df.loc[:, no_scale_cols], df_scaled], axis=1)
+    df_processed = pd.concat([df.loc[:, no_scale_cols], df_scaled], axis=1)
 
     # Save min-max dictionary locally
     with open(min_max_file, 'w') as f:
         json.dump(min_max_dict, f, indent=4)
+
+    return df_processed
+
+
+def process_dhs(dhs_data_dir):
+    """
+    Creates DHS DataFrames and Poverty DataFrames using the get_poverty() function.
+    Aggregates these DataFrames to the cluster level and joins these DataFrames with the GPS data
+    Then saves and splits the data into train/test splits.
+
+    Parameters:
+        dhs_data_dir (str): The path to the directory containing the DHS data files.
+
+    Returns:
+        None
+    """ 
+
+    # check we have DHS data for each country in config file
+    print('Checking file integrity...')
+    if not check_file_integrity(dhs_data_dir, config_data['countries'], dhs_cc):
+        raise FileNotFoundError('DHS data incomplete')
+
+    # create DataFrames storing dhs data, and if possible create DataFrames with poverty deprivation indicators
+    dhs_dfs, pov_dfs = get_dhs_and_pov_dfs(dhs_data_dir)
+                
+    # aggregate to the cluster level
+    dhs_df_all = agg_dhs_dfs(dhs_dfs)
+    pov_df_all = agg_pov_dfs(pov_dfs)
+    centroid_df = get_geo_data(dhs_data_dir)
+    
+    # merge dhs, poverty data and GPS data on centroid ID/id
+    merged_centroid_df = pd.merge(centroid_df, pov_df_all, left_on='CENTROID_ID', right_on='id', how='left')
+    merged_centroid_df = pd.merge(merged_centroid_df, dhs_df_all, left_on='CENTROID_ID', right_on='id', how='left')
+
+    # remove some cols after join
+    merged_centroid_df = merged_centroid_df.drop(["hhid", "indid", "id_x", "id_y", "year_interview"], axis=1)
+
+    # remove all over 16s
+    merged_centroid_df = merged_centroid_df[merged_centroid_df["age"] < 16]
+
+    # min/max scale cols
+    df_processed = min_max_scale(merged_centroid_df)
 
     # get names of cols for mod/sev deprivation (but not one hot encoded cols)
     col_pattern = r"^[a-zA-Z]*\d*_[^a-zA-Z]"
