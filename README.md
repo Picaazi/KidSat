@@ -33,7 +33,9 @@ If you wish to move straight on to the setup instructions, skip this next sectio
 
 ### Intial Setup and Important Notes
 
-The data step is suitably quick to run on your local computer, or this can all be done on a VM on GCP. Create a virtual environment and install all the modules in ```requirements.txt```. Note that some of the code made need some slight changes to work with Landsat imagery and for temporal analysis (I believe just predict_orphanhood.py needs to be changed). Also note that if the file and folder names differ from the ones described below then some of the code may need to be adapted. If I had more time, then I would sort this.
+The data step is suitably quick to run on your local computer, or this can all be done on a VM on GCP. Create a virtual environment and install all the modules in ```requirements.txt```. 
+
+Note that ```predict_orphanhood.py``` needs some slight changes to work with Landsat imagery and the temporal Dino model.
 
 ### DHS data
 First register for access to the DHS data in the necessary countries. For each country and year download all the Stata files, alongside the Geographic data (Shape file). This must be done manually, not via the bulk download manager. Store this data at ```survey_processing/dhs_data```. The file structure should be as follows:
@@ -57,7 +59,7 @@ The resulting training and test data for our models will be stored in ```survey_
 
 We now need to download the satellite imagery at each of the clusters in the DHS data. For this project we have typically used 10km x 10km images, this is partially due to the jitter of the DHS data. If you are lucky, someone will have done this for you, i.e safely stored on the MLGH Google Drive. Otherwise you will need to extract the coordinates for each of the clusters using ```geopandas``` on the geographic Shape files. These coordinates will need to be stored in a ```DataFrame``` with columns ```name, lat, lon``` where ```name``` is the cluster ID (i.e ZM201800000023). 
 
-To download these satellite images you will need to code a very short script utilising ```imagery_scraping/download_imagery.py```. Firstly, update the GEE project name in the config file ```imagery_scraping/config/google_config.json```. Then you only need to load the ```DataFrame``` mentioned above for each survey, and call the ```download_imagery()``` function from ```download_imagery.py```. GEE caps the number of requests to 3000 at a time, so you will need to run the script repeatedly. You may wish to use the python ```OS``` module to count the files you have downloaded to check none are missed. It is recommended to store these satellite images in a folder called ```imagery```, but this is not required.
+To download these satellite images you will need to code a very short script utilising ```imagery_scraping/download_imagery.py```. Firstly, update the GEE project name in the config file ```imagery_scraping/config/google_config.json```. Then you only need to load the ```DataFrame``` mentioned above for each survey, and call the ```download_imagery()``` function from ```download_imagery.py```. GEE caps the number of requests to 3000 at a time, so you will need to run the script repeatedly. You may wish to use the python ```OS``` module to count the files you have downloaded to check none are missed. It is recommended to store these satellite images in a folder called ```imagery```.
 
 ### Google Cloud
 
@@ -76,14 +78,14 @@ To train our Dino model, it is necessary to utilise Google Cloud's Compute Engin
 Now follow these instructions to setup the VM from the command line:
 1. Python, git etc should be already installed so begin by cloning the KidSatExt repository.
 2. The Deep Learning VM uses a conda virutal environment, install the modules from ```requirements.txt```.
-3. Copy the data in ```processed_data``` from the Cloud Bucket to the VM using ```gcloud storage```.
-4. To load the imagery when training the dino model, we need each images file path. We can do this by mounting the Cloud Bucket to the VM using ```gcsfuse```.
+3. Copy the data in ```survey_processing/processed_data``` from the Cloud Bucket to the VM using ```gcloud storage```.
+4. To load the imagery when training the dino model, we need each images file path. We can do this by mounting the Cloud Bucket to the VM using ```gcsfuse```. Create a directory for these images called ```dhs_imagery```.
 
 ### Dino Model Training
 
 DinoV2 is a model that can be used for a range of computer vision tasks. It is created by Facebook and trained on millions of images. It can take varying size images as an input, although ideally all images should be the same size.  We can finetune this model on additional images.
 
-The model is trained in two stages. First we finetune the Dino model alone. The input to our model is a satellite image for a cluster. And the target data is either [the proportion of children who have lost a mother, ... lost a father], or this vector + the 99 dimension child poverty vector from the KidSat project. Then we add a ridge regression layer to the end of our Dino model, which will only output 1 value, orphanhood. This ridge regression layer is trained using the satellite imagery and the proportion of orphans in each cluster. One model is trained on each fold, and we will pick the best model out of the 5 at then end.
+The model is trained in two stages. First we finetune the Dino model alone. The input to our model is a satellite image for a cluster. And the target data is either [the proportion of children who have lost a mother, ... lost a father], or this vector + the 99 dimension child poverty vector from the KidSat project. Then we add a ridge regression layer to the end of our Dino model, which will only output 1 value, orphanhood. This ridge regression layer is trained using the satellite imagery and the proportion of orphans in each cluster. One model is trained on each fold.
 
 To finetune the dino model we run the following command for all 5 of the folds:
 ```
@@ -99,10 +101,20 @@ The model's learned parameters, as well as the ridge regression parameters are s
 
 ### Next Steps
 
-We can now get some predictions. We can use ```modelling/dino/predict_orphanhood.py``` to get orphanhood predictions in the form of a ```DataFrame``` with columns ```name, lat, lon, orphaned, in_sample```. Where 'name' is the centroid ID and 'in_sample' is an indicator variable of whether the image has been used to train the model. To predict orphanhood for a certain country, we need to download more satellite imagery, covering the whole country. Create a folder called ```prediction_data``` and follow all the previous steps to download the new imagery. Store the images at ```prediction_data/imagery_folder_name```. Also store a ```DataFrame``` with columns ```name, lat, lon``` in the ```prediction_data``` folder. This should contain the center coordinates of all the imagery we have just downloaded. Then run the following command:
+We can now get some predictions. We can use ```modelling/dino/predict_orphanhood.py``` to output orphanhood predictions in the form of a ```DataFrame``` with columns ```name, lat, lon, orphaned, in_sample```. Where ```name``` is the centroid ID and ```in_sample``` is an indicator variable of whether the image has been used to train the model. Note this currently only works for the spatial Dino model trained on Sentinel imagery. This can be quite easily adapted.
+
+As an example, to predict orphanhood for a certain country, we need to download more satellite imagery, covering the whole country. Create a folder called ```prediction_data``` and follow all the previous steps to download the new imagery and store it there. In this folder, we also want to store the image file names with their center coordinates in the form of a ```DataFrame``` with columns ```name, lat, lon```. Then run the following command:
 ```
 python modelling/dino/predict_orphanhood.py --use_checkpoint --imagery_source S imagery_path {path_to_parent_imagery_folder} --data_path {path_to_imagery_coords_csv}
 ```
-These predictions are then stored at ```prediction_data/orphanhood_predictions_fold_i.csv```.
+The predictions from each of the five models are then saved as ```prediction_data/orphanhood_predictions_fold_i.csv```.
 
 We can then plot the true values vs the predictions if available or run the Python Notebook ```create_choropleth_map.ipynb``` to get a choropleth map of orphanhood. This file is currently configured to create an orphanhood map for Zambia, but other maps can be made by downloading the appropriate map file from ```https://gadm.org/```.
+
+## My Orphanhood Prediction Results
+
+- Aim of this project.
+- Model, hyperparameters, data it's trained on.
+- Show Graphs.
+- State Errors.
+- State what I think is going on and how to improve the result.
