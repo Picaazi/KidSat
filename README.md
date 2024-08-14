@@ -5,7 +5,7 @@ We have two aims with this extension of the KidSat project:
 we have in the Sinazongwe District.
 
 If you are viewing this from the KidSat project, these are the main changes that I have made:
-1. Changed the joins of the KR, IR and PR, and tidied up the code of ```survey_processing/main.py``` so that children from 6 to 18 are now included in the training data for the models.
+1. Changed the joins of the KR, IR and PR, and restructured the code of ```survey_processing/main.py``` so that children from 6 to 18 are now included in the training data for the models and it is easier to read and make changes to.
 2. Tidied up, restructured and commented several files. As one example, I've commented and restructured ```evaluate_orphanhood.py```, which is the counterpart to ```evaluate.py``` from the KidSat project. This file only needs a couple of small changes to be used for predicting child deprivation for the KidSat project.
 3. Added code to predict orphanhood.
 4. Added a more in-depth set of instructions for getting all the data, setting up the google cloud compute engine, training the model and getting predictions and orphanhood maps.
@@ -25,9 +25,9 @@ If you wish to move straight on to the setup instructions, skip this next sectio
 ### My Findings and Recommended Changes for the KidSat Paper
 
 1. Firstly the join I have changed in ```survey_processing/main.py``` now means that the data includes 6 - 18 year olds. There is a lot more data so the predictions from the KidSat paper could potentially be improved. Also, the 99 dimension vector from the KidSat paper mainly depends on data from the PR, and only a few variables from the KR (under 5s dataset). So these new 6 - 18 year olds will have enough data for to contribute towards the 99 dimension vector.
-2. I recommend to re-code ```survey_processing/main.py```. My main concern is that a lot of children are getting removed from the final dataset if they are missing only a few variables, and this is happening at multiple different points in the code, and also in the ```finetune_spatial.py``` code. I believe all the clusters have enough remaining children after the removals, but it is worth checking we don't have any tiny clusters.
-3. Mention I have run the model for orphanhood, potentially overfit, we need to output MSE, MAPE, R2 as well as MAE, why is the batch size only 1, how were the hyperparameters chosen, show the predictions here
-4. RGB only vs not images need to be read differently, as one has 3 bands and the other has a lot more
+2. In ```finetune.py``` and ```evaluate.py```, clusters that are missing any variable from the 99 dimension vector are removed. This means that the total number of clusters is reduced from 24,000 to 14,000. And it also means we lose 14 surveys from the 46 we had. Including all the pre-2005 surveys, ZA2017 (the only survey in South Africa), RW2005, RW2008 and ET2010. It may be useful to look at either excluding these surveys from the paper, or looking at ways of including more of the data.
+3. I suggest outputting the MAPE, MSE, MAE and R2 score everytime the model is trained since MAE does not give a full picture, due to the data being in the range [0, 1].
+4. The file ```download_imagery.py``` gives the option to get imagery with all colour bands or RBG only. These images however need to be read differently than the code currently does. I have adapted the function to read the image bands in ```predict_orphanhood.py``` to do this.
 
 ## Instructions
 
