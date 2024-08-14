@@ -35,8 +35,6 @@ If you wish to move straight on to the setup instructions, skip this next sectio
 
 The data step is suitably quick to run on your local computer, or this can all be done on a VM on GCP. Create a virtual environment and install all the modules in ```requirements.txt```. Note that some of the code made need some slight changes to work with Landsat imagery and for temporal analysis (I believe just predict_orphanhood.py needs to be changed). Also note that if the file and folder names differ from the ones described below then some of the code may need to be adapted. If I had more time, then I would sort this.
 
-In the MLGH GCP, the dinov2-zambia2 VM is already configured and there are cloud buckets available with all the Sentinel imagery, and all the DHS data. Furthermore, in the ```modelling/dino/model``` folder, we have the weights for the orphanhood Dino model. This model first predicts [hv111, hv113] and then predicts orphanhood. The model is trained on the Sentinel imagery for all the countries used in the KidSat project.
-
 ### DHS data
 First register for access to the DHS data in the necessary countries. For each country and year download all the Stata files, alongside the Geographic data (Shape file). This must be done manually, not via the bulk download manager. Store this data at ```survey_processing/dhs_data```. The file structure should be as follows:
 ```
