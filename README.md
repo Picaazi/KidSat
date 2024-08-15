@@ -22,7 +22,7 @@ Here is an overall description of how we plan to predict orphanhood:
 
 If you wish to move straight on to the setup instructions, skip this next section.
 
-### My Findings and Suggested Changes for the KidSat Paper
+### My Findings and Suggestions for the KidSat Paper
 
 1. Firstly in ```survey_processing/main.py``` I have changed the join of the PR and IR to the KR (under 5's dataset), from a left join to an outer join. As a consequence the data now includes 6 - 18 year olds. This means that there is a lot more data so the predictions from the KidSat paper could potentially be improved. Also, the 99 dimension vector from the KidSat paper mainly depends on data from the PR, and only a few variables from the KR. So these new 6 - 18 year olds will have enough data to contribute towards the 99 dimension vector.
 2. In ```finetune.py``` and ```evaluate.py```, clusters that are missing any variable from the 99 dimension vector are removed. This means that the total number of clusters is reduced from 24,000 to 14,000. And it also means we lose 14 surveys from the 46 we had. Including all the pre-2005 surveys, ZA2017 (the only survey we're using in South Africa), RW2005, RW2008 and ET2010. It may be useful to look at either excluding these surveys from the paper, or looking at ways of including more of the data.
