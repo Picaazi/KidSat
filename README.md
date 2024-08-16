@@ -119,4 +119,4 @@ We can then plot the true values vs the predictions if available or run the Pyth
 - Show Graphs.
 - State Errors.
 - State what I think is going on and how to improve the result.
-![plot](./blob/main/orphanhood_predictions_out_sample.PNG)
+![plot](./orphanhood_predictions_out_sample.PNG)
