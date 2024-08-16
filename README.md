@@ -26,8 +26,9 @@ If you wish to move straight on to the setup instructions, skip this next sectio
 
 1. Firstly in ```survey_processing/main.py``` I have changed the join of the PR and IR to the KR (under 5's dataset), from a left join to an outer join. As a consequence the data now includes 6 - 18 year olds. This means that there is a lot more data so the predictions from the KidSat paper could potentially be improved. Also, the 99 dimension vector from the KidSat paper mainly depends on data from the PR, and only a few variables from the KR. So these new 6 - 18 year olds will have enough data to contribute towards the 99 dimension vector.
 2. In ```finetune.py``` and ```evaluate.py```, clusters that are missing any variable from the 99 dimension vector are removed. This means that the total number of clusters is reduced from 24,000 to 14,000. And it also means we lose 14 surveys from the 46 we had. Including all the pre-2005 surveys, ZA2017 (the only survey we're using in South Africa), RW2005, RW2008 and ET2010. It may be useful to look at either excluding these surveys from the paper, or looking at ways of including more of the data.
-3. I suggest outputting the MAPE, MSE, MAE and R2 score everytime the model is trained since MAE does not give a full picture, due to the data being in the range [0, 1].
-4. The file ```download_imagery.py``` gives the option to get imagery with all colour bands or RBG only. The RGB bands from these images however need to be read differently from each other. I have adapted ```load_and_preprocess_image()``` in ```predict_orphanhood.py``` to read the image bands in both all colour band and RGB only imagery.
+3. I have restructured, partially recoded and fully commented ```survey_processing/main.py``` to make it easier to make future changes.
+4. I suggest outputting the MAPE, MSE, MAE and R2 score everytime the model is trained since MAE does not give a full picture, due to the data being in the range [0, 1].
+5. The file ```download_imagery.py``` gives the option to get imagery with all colour bands or RBG only. The RGB bands from these images however need to be read differently from each other. I have adapted ```load_and_preprocess_image()``` in ```predict_orphanhood.py``` to read the image bands in both all colour band and RGB only imagery.
 
 ## Instructions
 
