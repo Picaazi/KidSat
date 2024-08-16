@@ -114,11 +114,8 @@ We can then plot the true values vs the predictions if available or run the Pyth
 
 ## My Orphanhood Prediction Results
 
-- Aim of this project.
-- Model, hyperparameters, data it's trained on.
-- Show Graphs.
-- State Errors.
-- State what I think is going on and how to improve the result.
+I trained my orphanhood model using all the clusters in Sub-Saharan Africa (the countries from the KidSat Project). I used RGB Sentinel imagery. My Dino model first predicted the proportion of people who lost a mother and the proportion of people who lost a father. Then the ridge regression layer predicted orphanhood. I trained the model using the same hyperparameters as in the KidSat Project. A batch size of one and ten epochs. I used my adapted version of ```survey_processing/main.py``` to get the DHS and poverty data. This allowed me to make use of children of all ages in the data. My first set of results however did not turn out as planned: 
+
 <div align="center">
   <img src="./orphanhood_predictions_out_sample.PNG" alt="Plot">
 </div>
@@ -126,3 +123,11 @@ We can then plot the true values vs the predictions if available or run the Pyth
 <div align="center">
   <img src="./orphanhood_predictions_in_sample.PNG" alt="Plot">
 </div>
+
+The performance on the best fold was as follows:
+- MAE: 0.00423
+- MSE: 0.05094
+- MAPE: 35 trillion
+- R2: 0.09224
+
+The proportion of people who lost a mother and lost a father are directly related to orphanhood proportion. So clearly the model is not effective at predicting orphanhood alone from a satellite image. The results from the KidSat paper suggest their model is reasonably effective at predicting the level of deprivation. The deprivation should be an important covariate to orphanhood proportion, hence I believe the model performance can be drastically improved if we first predict proportion of people who lost a mother and lost a father alongside the 99 dimension child deprivation vector, then predict orphanhood proportion. Unfortunately I ran out of time this summer to work on this. I'm hopeful that someone will be able to get an improved model.
