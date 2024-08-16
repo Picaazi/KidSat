@@ -120,9 +120,9 @@ We can then plot the true values vs the predictions if available or run the Pyth
 - State Errors.
 - State what I think is going on and how to improve the result.
 <div align="center">
-![alt text](./orphanhood_predictions_out_sample.PNG)
+  <img src="./orphanhood_predictions_out_sample.PNG" alt="Plot">
 </div>
 
 <div align="center">
-![plot](./orphanhood_predictions_in_sample.PNG)
+  <img src="./orphanhood_predictions_in_sample.PNG" alt="Plot">
 </div>
