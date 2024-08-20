@@ -84,9 +84,6 @@ def process_dhs(dhs_data_dir):
     # remove some cols after join
     merged_centroid_df = merged_centroid_df.drop(["hhid", "indid", "id_x", "id_y", "year_interview"], axis=1)
 
-    # remove all over 16s
-    merged_centroid_df = merged_centroid_df[merged_centroid_df["age"] < 16]
-
     # min/max scale cols
     df_processed = min_max_scale(merged_centroid_df)
 
