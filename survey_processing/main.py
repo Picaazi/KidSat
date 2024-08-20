@@ -37,10 +37,10 @@ from pandas.api.types import is_numeric_dtype
 warnings.filterwarnings('ignore')
 
 # parent directory of the processed data, config files and file to store min/max values
-cc_file = os.path.join("survey_processing/dhs_country_code.json")
-min_max_file = os.path.join("survey_processing/min_max_values.json")
-save_processed_dir = os.path.join("survey_processing/processed_data/")
-config_file = os.path.join("survey_processing/processing_params.json")
+cc_file = "survey_processing/dhs_country_code.json"
+min_max_file = "survey_processing/min_max_values.json"
+save_processed_dir = "survey_processing/processed_data/"
+config_file = "survey_processing/processing_params.json"
 
 # load json config file
 with open(config_file, 'r') as file:
