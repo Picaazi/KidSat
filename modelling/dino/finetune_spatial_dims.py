@@ -153,7 +153,11 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     base_model = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14').to(device)
     
+    
     class BandSelector(nn.Module):
+        # Used to select specific bands from the input tensor
+        # This model takes a 13-channel input and outputs a 3-channel tensor
+    
         def __init__(self):
             super().__init__()
             # Define a 1x1 convolution to map 13 channels to 3 channels
@@ -166,13 +170,14 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
             self.conv.weight.data[0, 3] = 1.0  # Output channel 0: Band 4 (input channel 3)
             self.conv.weight.data[1, 2] = 1.0  # Output channel 1: Band 3 (input channel 2)
             self.conv.weight.data[2, 1] = 1.0  # Output channel 2: Band 2 (input channel 1)
-
+        # Forward pass through the convolution layer
         def forward(self, x):
             return self.conv(x)
     
     # Move the updated model to the device
     base_model = base_model.to(device)
 
+    # Save the model state and optimizer state
     def save_checkpoint(model, optimizer, epoch, loss, filename="checkpoint.pth"):
         torch.save({
             'epoch': epoch,
@@ -190,6 +195,8 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
             self.projection = projection
             # Assuming the original model outputs 768 features from the transformer
             self.regression_head = nn.Linear(emb_size, len(predict_target))  # Output one continuous variable
+            
+            # Use sigmoid activation if specified, otherwise use ClippedReLU (sigmoid is inputed in the command line)
             if sigmoid:
                 self.activation = nn.Sigmoid()
             else:
@@ -203,6 +210,8 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
     model = ViTForRegression(base_model, projection).to(device)
     best_model = f'modelling/dino/model/{model_name}_{fold}_all_cluster_best_{imagery_source}{target}_.pth'
     last_model = f'modelling/dino/model/{model_name}_{fold}_all_cluster_last_{imagery_source}{target}_.pth'
+    
+    # Check if the model already exists
     if os.path.exists(last_model):
         last_state_dict = torch.load(last_model)
         best_error = torch.load(best_model)['loss']
@@ -260,14 +269,16 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
         mean_val_loss = np.mean(val_loss)   
         mean_indiv_loss = torch.stack(indiv_loss).mean(dim=0)
 
+        # If we have a better model, save it
         if mean_val_loss< best_error:
             save_checkpoint(model, optimizer, epoch, mean_val_loss, filename=best_model)
             best_error = mean_val_loss
+            
         print(f'Epoch [{epoch+1}/{num_epochs}], Validation Loss: {mean_val_loss}, Individual Loss: {mean_indiv_loss}')
         save_checkpoint(model, optimizer, epoch, mean_val_loss, filename=last_model)
 
 
-
+# Command line
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run satellite image processing model training.')
     parser.add_argument('--fold', type=str, help='CV fold')

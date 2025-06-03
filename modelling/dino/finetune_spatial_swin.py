@@ -19,15 +19,16 @@ from torch.nn import L1Loss
 import warnings
 warnings.filterwarnings("ignore")
 import sys
+from models import ViTForRegression
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-class ClippedReLU(nn.Module):
-    def __init__(self, max_value=1.0):
-        super(ClippedReLU, self).__init__()
-        self.max_value = max_value
+# class ClippedReLU(nn.Module):
+#     def __init__(self, max_value=1.0):
+#         super(ClippedReLU, self).__init__()
+#         self.max_value = max_value
 
-    def forward(self, x):
-        return torch.clamp(x, min=0, max=self.max_value)
+#     def forward(self, x):
+#         return torch.clamp(x, min=0, max=self.max_value)
     
 def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch_size, num_epochs, img_size = None, raw = False):
     
@@ -179,17 +180,17 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
     torch.cuda.empty_cache()
     
     
-    class ViTForRegression(nn.Module):
-        def __init__(self, base_model):
-            super().__init__()
-            self.base_model = base_model
-            # Assuming the original model outputs 768 features from the transformer
-            self.regression_head = nn.Linear(emb_size, len(predict_target))  # Output one continuous variable
-            self.act = torch.sigmoid
-        def forward(self, pixel_values):
-            outputs = self.base_model(pixel_values)
-            # We use the last hidden state
-            return self.act(self.regression_head(outputs))
+    # class ViTForRegression(nn.Module):
+    #     def __init__(self, base_model):
+    #         super().__init__()
+    #         self.base_model = base_model
+    #         # Assuming the original model outputs 768 features from the transformer
+    #         self.regression_head = nn.Linear(emb_size, len(predict_target))  # Output one continuous variable
+    #         self.act = torch.sigmoid
+    #     def forward(self, pixel_values):
+    #         outputs = self.base_model(pixel_values)
+    #         # We use the last hidden state
+    #         return self.act(self.regression_head(outputs))
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using {device}")
@@ -258,7 +259,6 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
             best_error = mean_val_loss
         print(f'Epoch [{epoch+1}/{num_epochs}], Validation Loss: {mean_val_loss}, Individual Loss: {mean_indiv_loss}')
         save_checkpoint(model, optimizer, epoch, mean_val_loss, filename=last_model)
-
 
 
 if __name__ == '__main__':
