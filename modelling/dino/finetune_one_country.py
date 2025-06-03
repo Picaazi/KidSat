@@ -19,24 +19,16 @@ from torch.optim import Adam
 from torch.nn import L1Loss
 import warnings
 
-from preparation import image_config, set_seed, CustomDataset
+from preparation import image_config, set_seed, CustomDataset, save_checkpoint
 from models import ViTForRegression
 
 warnings.filterwarnings("ignore")  # Ignore warnings for clean output
-
 
 # Main function that handles training
 def main(country, model_name, target, imagery_path, imagery_source, emb_size, batch_size, num_epochs, img_size=None):
 
     # Set normalization and default image size based on the satellite imagery source
     normalization, imagery_size = image_config(imagery_source, img_size=img_size)
-
-    # Define where the data is stored
-    data_folder = r"survey_processing/processed_data"
-
-    # Read training and testing data from CSV files
-    train_df = pd.read_csv(f"{data_folder}/train_fold_{country}.csv")
-    test_df = pd.read_csv(f"{data_folder}/test_fold_{country}.csv")
 
     # List all available satellite images
     available_imagery = []
@@ -52,17 +44,25 @@ def main(country, model_name, target, imagery_path, imagery_source, emb_size, ba
                 return True
         return False
 
-    train_df = train_df[train_df["CENTROID_ID"].apply(is_available)]
-    test_df = test_df[test_df["CENTROID_ID"].apply(is_available)]
-    if test_df.empty:
-        raise Exception(f"No test data available for {country}")
-
     # Find the exact image path for each centroid ID
     def filter_contains(query):
         # Returns a list of items that contain the given query substring.
         for item in available_imagery:
             if query in item:
                 return item
+    
+    # Define where the data is stored
+    data_folder = r"survey_processing/processed_data"
+
+    # Read training and testing data from CSV files
+    train_df = pd.read_csv(f"{data_folder}/train_fold_{country}.csv")
+    test_df = pd.read_csv(f"{data_folder}/test_fold_{country}.csv")
+    
+    # Filter out rows that don't have corresponding imagery
+    train_df = train_df[train_df["CENTROID_ID"].apply(is_available)]
+    test_df = test_df[test_df["CENTROID_ID"].apply(is_available)]
+    if test_df.empty:
+        raise Exception(f"No test data available for {country}")
 
     train_df["imagery_path"] = train_df["CENTROID_ID"].apply(filter_contains)
     test_df["imagery_path"] = test_df["CENTROID_ID"].apply(filter_contains)
@@ -89,63 +89,12 @@ def main(country, model_name, target, imagery_path, imagery_source, emb_size, ba
     train_df = train_df.dropna(subset=filtered_predict_target)
     predict_target = sorted(filtered_predict_target)
 
-    # Load and preprocess the image using selected bands (RGB)
-    def load_and_preprocess_image(path, grouped_bands=[4, 3, 2]):
-        with rasterio.open(path) as src:
-            b1 = src.read(grouped_bands[0])
-            b2 = src.read(grouped_bands[1])
-            b3 = src.read(grouped_bands[2])
-
-            # Stack and normalize the bands
-            img = np.dstack((b1, b2, b3))
-            img = img / normalization  # Normalize to [0, 1] (if required)
-
-        img = np.nan_to_num(img, nan=0, posinf=1, neginf=0)
-        img = np.clip(img, 0, 1)  # Clip values to be within the 0-1 range
-
-        # Scale back to [0, 255] for visualization purposes
-        img = (img * 255).astype(np.uint8)
-
-        return img
-
-    # # Set random seed for reproducibility
-    # def set_seed(seed):
-    #     torch.manual_seed(seed)
-    #     torch.cuda.manual_seed(seed)
-    #     torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
-    #     np.random.seed(seed)
-    #     random.seed(seed)
-    #     torch.backends.cudnn.deterministic = True
-    #     torch.backends.cudnn.benchmark = False
-
     # Set your desired seed
     seed = 42
     set_seed(seed)
 
     # Split training data into train and validation sets
     train, validation = train_test_split(train_df, test_size=0.2, random_state=42)
-
-    # # Custom PyTorch dataset for loading image and target
-    # class CustomDataset(Dataset):
-    #     def __init__(self, dataframe, transform):
-    #         self.dataframe = dataframe
-    #         self.transform = transform
-
-    #     def __len__(self):
-    #         return len(self.dataframe)
-
-    #     def __getitem__(self, idx):
-    #         item = self.dataframe.iloc[idx]
-    #         image = load_and_preprocess_image(item["imagery_path"])
-    #         # Apply feature extractor if necessary, might need adjustments
-    #         image_tensor = self.transform(Image.fromarray(image))
-
-    #         # Assuming your target is a single scalar
-    #         target = torch.tensor(item[predict_target], dtype=torch.float32)
-    #         return (
-    #             image_tensor,
-    #             target,
-    #         )  # Adjust based on actual output of feature_extractor
 
     # Transform to resize and convert images to tensors
     transform = transforms.Compose(
@@ -166,36 +115,24 @@ def main(country, model_name, target, imagery_path, imagery_source, emb_size, ba
     # Load pretrained DINOv2 model from Facebook's repo
     base_model = torch.hub.load("facebookresearch/dinov2", model_name)
 
-    # Function to save model checkpoints
-    def save_checkpoint(model, optimizer, epoch, loss, filename="checkpoint.pth"):
-        torch.save(
-            {
-                "epoch": epoch,
-                "model_state_dict": model.state_dict(),
-                "optimizer_state_dict": optimizer.state_dict(),
-                "loss": loss,
-            },
-            filename,
-        )
+    # # Function to save model checkpoints
+    # def save_checkpoint(model, optimizer, epoch, loss, filename="checkpoint.pth"):
+    #     torch.save(
+    #         {
+    #             "epoch": epoch,
+    #             "model_state_dict": model.state_dict(),
+    #             "optimizer_state_dict": optimizer.state_dict(),
+    #             "loss": loss,
+    #         },
+    #         filename,
+    #     )
 
     torch.cuda.empty_cache()
-
-    # # Create a regression model using DINOv2 as feature extractor
-    # class ViTForRegression(nn.Module):
-    #     def __init__(self, base_model):
-    #         super().__init__()
-    #         self.base_model = base_model
-    #         # Assuming the original model outputs 768 features from the transformer
-    #         self.regression_head = nn.Linear(emb_size, len(predict_target))  # Output one continuous variable
-
-    #     def forward(self, pixel_values):
-    #         outputs = self.base_model(pixel_values)
-    #         # We use the last hidden state
-    #         return torch.sigmoid(self.regression_head(outputs))
 
     # Resume from checkpoint if exists
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = ViTForRegression(base_model,emb_size=emb_size, predict_size=len(predict_target)).to(device)
+    
     best_model = f"modelling/dino/model/{model_name}_{country}_one_country_best_{imagery_source}{target}.pth"
     last_model = f"modelling/dino/model/{model_name}_{country}_one_country_last_{imagery_source}{target}.pth"
     
@@ -246,6 +183,7 @@ def main(country, model_name, target, imagery_path, imagery_source, emb_size, ba
             loss.backward()
             optimizer.step()
         torch.cuda.empty_cache()
+        
         # Validation phase
         model.eval()
         val_loss = []

@@ -16,7 +16,7 @@ from sklearn.model_selection import train_test_split
 from torch.optim import Adam
 from torch.nn import L1Loss
 import warnings
-from preparation import image_config, set_seed, CustomDataset
+from preparation import image_config, set_seed, CustomDataset, save_checkpoint
 from models import ViTForRegression
 warnings.filterwarnings("ignore")
 
@@ -85,8 +85,8 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
         # transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # Normalize with ImageNet's mean and std
     ])
 
-    train_dataset = CustomDataset(train, transform, normalization, predict_target)
-    val_dataset = CustomDataset(validation, transform, normalization, predict_target)
+    train_dataset = CustomDataset(train, transform, normalization, predict_target, grouped_bands)
+    val_dataset = CustomDataset(validation, transform, normalization, predict_target, grouped_bands)  
 
     # train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=batch_size+4)
     # val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=batch_size+4)
@@ -95,13 +95,13 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
 
     base_model = torch.hub.load('facebookresearch/dinov2', model_name)
 
-    def save_checkpoint(model, optimizer, epoch, loss, filename="checkpoint.pth"):
-        torch.save({
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'loss': loss
-        }, filename)
+    # def save_checkpoint(model, optimizer, epoch, loss, filename="checkpoint.pth"):
+    #     torch.save({
+    #         'epoch': epoch,
+    #         'model_state_dict': model.state_dict(),
+    #         'optimizer_state_dict': optimizer.state_dict(),
+    #         'loss': loss
+    #     }, filename)
 
     torch.cuda.empty_cache()
 

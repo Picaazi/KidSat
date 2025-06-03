@@ -21,14 +21,14 @@ def image_config(imagery_source, img_size=None):
         
     return normalization, imagery_size
 
-
-def load_and_preprocess_image(path, normalization, grouped_bands=[4, 3, 2]):
+# Load and preprocess the image using selected bands (RGB)
+def load_and_preprocess_image(path, normalization, grouped_bands):
     with rasterio.open(path) as src:
         b1 = src.read(grouped_bands[0])
         b2 = src.read(grouped_bands[1])
         b3 = src.read(grouped_bands[2])
 
-        # Stack and normalize the bands
+        # Stack and normalize the bandss
         img = np.dstack((b1, b2, b3))
         img = img / normalization  # Normalize to [0, 1] (if required)
 
@@ -50,21 +50,31 @@ def set_seed(seed):
     torch.backends.cudnn.benchmark = False
     
 class CustomDataset(Dataset):
-    def __init__(self, dataframe, transform, normalization, predict_target):
+    def __init__(self, dataframe, transform, normalization, predict_target, grouped_bands=[4, 3, 2]):
         self.dataframe = dataframe
         self.transform = transform
         self.normalization = normalization
         self.predict_target = predict_target
-
+        self.grouped_bands = grouped_bands
+        
     def __len__(self):
         return len(self.dataframe)
 
     def __getitem__(self, idx):
         item = self.dataframe.iloc[idx]
-        image = load_and_preprocess_image(item['imagery_path'], self.normalization)
+        image = load_and_preprocess_image(item['imagery_path'], self.normalization, self.grouped_bands)
         # Apply feature extractor if necessary, might need adjustments
         image_tensor = self.transform(Image.fromarray(image))
         
         # Assuming your target is a single scalar
         target = torch.tensor(item[self.predict_target], dtype=torch.float32)
         return image_tensor, target  # Adjust based on actual output of feature_extractor
+
+# Function to save model checkpoints
+def save_checkpoint(model, optimizer, epoch, loss, filename="checkpoint.pth"):
+    torch.save({
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'loss': loss
+    }, filename)
