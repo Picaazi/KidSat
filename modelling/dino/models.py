@@ -23,7 +23,7 @@ class ViTForRegression(nn.Module):
             
             # Use sigmoid activation if specified, otherwise use ClippedReLU (sigmoid is inputed in the command line)
             if activation == "sigmoid":
-                self.activation =  torch.Sigmoid()
+                self.activation =  torch.sigmoid()
             elif activation == "clipped_relu":
                 self.activation = ClippedReLU()
                 
