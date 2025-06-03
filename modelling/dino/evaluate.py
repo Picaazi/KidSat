@@ -29,7 +29,7 @@ def evaluate(fold, model_name, target = "", use_checkpoint = False, model_not_na
         if mode == 'temporal':
             checkpoint = f'{model_par_dir}{model_name}_temporal_best_{imagery_source}{named_target}_.pth'
         elif mode == 'spatial':
-            checkpoint = f'{model_par_dir}{model_name}_{fold}_{grouped_bands}all_cluster_best_{imagery_source}{named_target}_.pth'
+            checkpoint = f'{model_par_dir}{model_name}_{fold}_Noneall_cluster_best_{imagery_source}{named_target}_.pth'
         elif mode == 'one_country':
             checkpoint = f'{model_par_dir}{model_name}_{fold}_one_country_best_{imagery_source}{named_target}_.pth'
         else:
