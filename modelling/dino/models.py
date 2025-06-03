@@ -11,22 +11,21 @@ class ClippedReLU(nn.Module):
         return torch.clamp(x, min=0, max=self.max_value)
     
 class ViTForRegression(nn.Module):
-        def __init__(self, base_model, projection= None, activation="sigmoid", emb_size=768, predict_target=99):
+        def __init__(self, base_model, projection= None, activation="sigmoid", emb_size=768, predict_size=99):
             super().__init__()
             self.base_model = base_model
             if projection:
                 self.projection = projection
             else:
                 self.projection = nn.Identity()
-            # Assuming the original model outputs 768 features from the transformer
-            self.regression_head = nn.Linear(emb_size, predict_target)  # Output one continuous variable
+                
+            self.regression_head = nn.Linear(emb_size, predict_size)  # Output one continuous variable
             
             # Use sigmoid activation if specified, otherwise use ClippedReLU (sigmoid is inputed in the command line)
             if activation == "sigmoid":
-                self.activation =  torch.sigmoid()
+                self.activation =  nn.Sigmoid()
             elif activation == "clipped_relu":
                 self.activation = ClippedReLU()
-                
             else:
                 self.activation = nn.Identity()
                 
@@ -34,8 +33,6 @@ class ViTForRegression(nn.Module):
             outputs = self.base_model(self.projection(pixel_values))
             # We use the last hidden state
             return self.activation(self.regression_head(outputs))
-        
-        
         
 class ViTForRegressionWithUncertainty(nn.Module):
     

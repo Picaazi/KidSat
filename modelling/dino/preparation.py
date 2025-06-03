@@ -6,8 +6,7 @@ from PIL import Image
 import rasterio
 import random
 
-
-def image_config(imagery_source):
+def image_config(imagery_source, img_size=None):
     if imagery_source == 'L':
         normalization = 30000.
         imagery_size = 336
@@ -16,6 +15,10 @@ def image_config(imagery_source):
         imagery_size = 994
     else:
         raise Exception("Unsupported imagery source")
+    
+    if not img_size is None:
+        imagery_size = img_size
+        
     return normalization, imagery_size
 
 

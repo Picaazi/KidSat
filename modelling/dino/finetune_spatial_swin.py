@@ -19,6 +19,7 @@ from torch.nn import L1Loss
 import warnings
 warnings.filterwarnings("ignore")
 import sys
+from preparation import image_config, set_seed, CustomDataset
 from models import ViTForRegression
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
@@ -32,14 +33,15 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
     
 def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch_size, num_epochs, img_size = None, raw = False):
     
-    if imagery_source == 'L':
-        normalization = 30000.
-        imagery_size = 336
-    elif imagery_source == 'S':
-        normalization = 3000.
-        imagery_size = 1024
-    else:
-        raise Exception("Unsupported imagery source")
+    normalization, imagery_size = image_config(imagery_source)
+    # if imagery_source == 'L':
+    #     normalization = 30000.
+    #     imagery_size = 336
+    # elif imagery_source == 'S':
+    #     normalization = 3000.
+    #     imagery_size = 1024
+    # else:
+    #     raise Exception("Unsupported imagery source")
     
     if not img_size is None:
         imagery_size = img_size
