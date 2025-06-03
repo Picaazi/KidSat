@@ -21,13 +21,13 @@ warnings.filterwarnings("ignore")
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-class ClippedReLU(nn.Module):
-    def __init__(self, max_value=1.0):
-        super(ClippedReLU, self).__init__()
-        self.max_value = max_value
+# class ClippedReLU(nn.Module):
+#     def __init__(self, max_value=1.0):
+#         super(ClippedReLU, self).__init__()
+#         self.max_value = max_value
 
-    def forward(self, x):
-        return torch.clamp(x, min=0, max=self.max_value)
+#     def forward(self, x):
+#         return torch.clamp(x, min=0, max=self.max_value)
     
 def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch_size, num_epochs, img_size = None, raw = False):
     
@@ -258,7 +258,6 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
             best_error = mean_val_loss
         print(f'Epoch [{epoch+1}/{num_epochs}], Validation Loss: {mean_val_loss}, Individual Loss: {mean_indiv_loss}')
         save_checkpoint(model, optimizer, epoch, mean_val_loss, filename=last_model)
-
 
 
 if __name__ == '__main__':

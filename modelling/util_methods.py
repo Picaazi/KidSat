@@ -105,7 +105,7 @@ def get_datasets(dhs_path, imagery_path, predict_target, temporal=False, split=T
             for f in os.listdir(os.path.join(imagery_path, d)):
                 available_imagery.append(os.path.join(imagery_path, d, f))
     print(available_imagery[:2])
-    available_centroids = [f.split('/')[-1][:-4] for f in available_imagery]
+    available_centroids = [f.split('/')[-1][:-4].split('-')[0] for f in available_imagery]
 
     def filter_contains(query):
         """

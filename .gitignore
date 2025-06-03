@@ -4,6 +4,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+
 # C extensions
 *.so
 
@@ -183,6 +184,11 @@ test*
 archived*
 afr_adm*
 *.npy
+
+
+
+.idea
+.DS_Store
 *.out
 
 

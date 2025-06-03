@@ -30,6 +30,8 @@ if [ ! -f "$CHECKPOINT_PATH" ]; then
     echo "❌ Checkpoint not found: $CHECKPOINT_PATH"
     echo "Please download SatMAE checkpoint first"
     exit 1
+else
+    echo "Loading OK!"
 fi
 
 # TRAINING: Fine-tune SatMAE
