@@ -235,9 +235,7 @@ def main(
             super().__init__()
             self.base_model = base_model
             # Assuming the original model outputs 768 features from the transformer
-            self.regression_head = nn.Linear(
-                emb_size, len(predict_target)
-            )  # Output one continuous variable
+            self.regression_head = nn.Linear(emb_size, len(predict_target))  # Output one continuous variable
 
         def forward(self, pixel_values):
             outputs = self.base_model(pixel_values)
@@ -249,6 +247,7 @@ def main(
     model = ViTForRegression(base_model).to(device)
     best_model = f"modelling/dino/model/{model_name}_{country}_one_country_best_{imagery_source}{target}.pth"
     last_model = f"modelling/dino/model/{model_name}_{country}_one_country_last_{imagery_source}{target}.pth"
+    
     if os.path.exists(last_model):
         last_state_dict = torch.load(last_model)
         best_error = torch.load(best_model)["loss"]
@@ -327,30 +326,19 @@ def main(
 
 # Entry point when running from command line
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Run satellite image processing model training."
-    )
+    
+    parser = argparse.ArgumentParser(description="Run satellite image processing model training.")
     parser.add_argument("--fold", type=str, help="CV fold")
     parser.add_argument("--model_name", type=str, help="Name of the model")
     parser.add_argument("--target", type=str, default="", help="Target variable")
-    parser.add_argument(
-        "--imagery_path", type=str, help="The parent directory of all imagery"
-    )
-    parser.add_argument(
-        "--imagery_source",
-        type=str,
-        default="L",
-        help="L for Landsat and S for Sentinel",
-    )
-    parser.add_argument(
-        "--emb_size", type=int, default=768, help="Size of the model output"
-    )
+    parser.add_argument("--imagery_path", type=str, help="The parent directory of all imagery")
+    parser.add_argument("--imagery_source",type=str,default="L",help="L for Landsat and S for Sentinel")
+    parser.add_argument("--emb_size", type=int, default=768, help="Size of the model output")
     parser.add_argument("--batch_size", type=int, help="Batch size")
-    parser.add_argument(
-        "--num_epochs", type=int, default=20, help="Number of epochs for training"
-    )
+    parser.add_argument("--num_epochs", type=int, default=20, help="Number of epochs for training")
     parser.add_argument("--imagery_size", type=int, help="Size of the imagery")
     args = parser.parse_args()
+    
     main(
         args.fold,
         args.model_name,

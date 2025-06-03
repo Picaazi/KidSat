@@ -18,22 +18,13 @@ import pandas as pd
 from tqdm import tqdm
 
 
-def evaluate(
-    fold,
-    model_name,
-    target="",
-    use_checkpoint=False,
-    imagery_path=None,
-    imagery_source=None,
-    mode="temporal",
-):
+def evaluate(fold, model_name, target="", use_checkpoint=False, imagery_path=None, imagery_source=None, mode="temporal"):
+    
     model_par_dir = r"modelling/dino/model/"
 
     import os
 
-    best_model = (
-        f"{model_name}ms_uncer_{fold}_all_cluster_best_{imagery_source}{target}_.pth"
-    )
+    best_model = (f"{model_name}ms_uncer_{fold}_all_cluster_best_{imagery_source}{target}_.pth")
     checkpoint = os.path.join(model_par_dir, best_model)
 
     print(f"Evaluating fold {fold} with target {target} using checkpoint {checkpoint}")
@@ -72,6 +63,7 @@ def evaluate(
 
     train_df = train_df[train_df["CENTROID_ID"].apply(is_available)]
     test_df = test_df[test_df["CENTROID_ID"].apply(is_available)]
+    
     if test_df.empty:
         raise Exception("Empty test set")
 
@@ -111,31 +103,18 @@ def evaluate(
         return img
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    base_models = [
-        torch.hub.load("facebookresearch/dinov2", model_name).to(device)
-        for _ in range(4)
-    ]
+    base_models = [torch.hub.load("facebookresearch/dinov2", model_name).to(device)for _ in range(4)]
 
     class ViTForRegressionWithUncertainty(nn.Module):
-        def __init__(
-            self,
-            base_models,
-            grouped_bands=[[4, 3, 2], [8, 4, 2], [13, 1, 3], [12, 8, 2]],
-            emb_size=768,
-            predict_target=1,
-        ):
+        def __init__(self, base_models, grouped_bands=[[4, 3, 2], [8, 4, 2], [13, 1, 3], [12, 8, 2]], emb_size=768, predict_target=1):
             super().__init__()
             self.base_models = nn.ModuleList(base_models)
             self.grouped_bands = torch.tensor(grouped_bands) - 1
-            self.cross_attention = nn.MultiheadAttention(
-                embed_dim=emb_size, num_heads=8
-            )
+            self.cross_attention = nn.MultiheadAttention(embed_dim=emb_size, num_heads=8)
 
             # Update the regression head to output both mean and uncertainty
             # The output size is doubled to handle both prediction (mean) and log variance
-            self.regression_head = nn.Linear(
-                emb_size * len(grouped_bands), predict_target * 2
-            )
+            self.regression_head = nn.Linear(emb_size * len(grouped_bands), predict_target * 2)
 
         def forward(self, pixel_values):
             # Extract outputs from each base model with specific band groups
@@ -145,29 +124,19 @@ def evaluate(
             ]
 
             # Stack and permute outputs for multihead attention
-            outputs = torch.stack(
-                outputs, dim=0
-            )  # Shape: [num_views, batch_size, emb_size]
+            outputs = torch.stack(outputs, dim=0)  # Shape: [num_views, batch_size, emb_size]
 
             # Apply cross-attention
-            attn_output, _ = self.cross_attention(
-                outputs, outputs, outputs
-            )  # Shape: [num_views, batch_size, emb_size]
+            attn_output, _ = self.cross_attention(outputs, outputs, outputs)  # Shape: [num_views, batch_size, emb_size]
 
             # Concatenate the attention output across all views
-            concat_output = torch.cat(
-                [attn_output[i] for i in range(attn_output.size(0))], dim=-1
-            )  # Shape: [batch_size, emb_size * num_views]
+            concat_output = torch.cat([attn_output[i] for i in range(attn_output.size(0))], dim=-1)  # Shape: [batch_size, emb_size * num_views]
 
             # Pass through regression head to get mean and log variance
-            regression_output = self.regression_head(
-                concat_output
-            )  # Shape: [batch_size, predict_target * 2]
+            regression_output = self.regression_head(concat_output)  # Shape: [batch_size, predict_target * 2]
 
             # Split the output into mean and log variance
-            mean, log_var = torch.chunk(
-                regression_output, 2, dim=-1
-            )  # Each is of shape [batch_size, predict_target]
+            mean, log_var = torch.chunk(regression_output, 2, dim=-1)  # Each is of shape [batch_size, predict_target]
 
             # Calculate variance and uncertainty (variance must be positive, so apply exp)
             variance = torch.exp(log_var)  # Shape: [batch_size, predict_target]
@@ -279,56 +248,18 @@ def evaluate(
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Run satellite image processing model training."
-    )
+    parser = argparse.ArgumentParser(description="Run satellite image processing model training.")
     parser.add_argument("--fold", type=str, default="1", help="The fold number")
-    parser.add_argument(
-        "--model_name", type=str, default="dinov2_vitb14", help="The model name"
-    )
+    parser.add_argument("--model_name", type=str, default="dinov2_vitb14", help="The model name")
     parser.add_argument("--target", type=str, default="", help="The target variable")
-    parser.add_argument(
-        "--imagery_source",
-        type=str,
-        default="L",
-        help="L for Landsat and S for Sentinel",
-    )
-    parser.add_argument(
-        "--imagery_path", type=str, help="The parent directory of all imagery"
-    )
-    parser.add_argument(
-        "--mode",
-        type=str,
-        default="temporal",
-        help="Evaluating temporal model or spatial model",
-    )
-    parser.add_argument(
-        "--use_checkpoint",
-        action="store_true",
-        help="Whether to use checkpoint file. If not, use raw model.",
-    )
+    parser.add_argument("--imagery_source",type=str,default="L",help="L for Landsat and S for Sentinel")
+    parser.add_argument("--imagery_path", type=str, help="The parent directory of all imagery")
+    parser.add_argument("--mode",type=str,default="temporal",help="Evaluating temporal model or spatial model")
+    parser.add_argument("--use_checkpoint",action="store_true",help="Whether to use checkpoint file. If not, use raw model.")
 
     args = parser.parse_args()
     maes = []
     if args.mode == "temporal":
-        print(
-            evaluate(
-                "1",
-                args.model_name,
-                args.target,
-                args.use_checkpoint,
-                args.imagery_path,
-                args.imagery_source,
-                args.mode,
-            )
-        )
+        print(evaluate("1", args.model_name, args.target, args.use_checkpoint, args.imagery_path, args.imagery_source, args.mode))
     elif "spatial" in args.mode:
-        mae = evaluate(
-            args.fold,
-            args.model_name,
-            args.target,
-            args.use_checkpoint,
-            args.imagery_path,
-            args.imagery_source,
-            args.mode,
-        )
+        mae = evaluate(args.fold, args.model_name, args.target, args.use_checkpoint, args.imagery_path, args.imagery_source, args.mode)

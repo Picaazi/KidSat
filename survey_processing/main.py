@@ -9,7 +9,7 @@ This script processes DHS data to generate indicators of poverty and deprivation
 then aggregates all data up to the cluster level.
 It then joins this to the GPS data and saves the data in train/test splits.
 
-Adjust the filepaths at the top of the script as neccesary.
+Adjust the filepaths at the top of the script as necessary.
 
 Usage:
     python main.py <dhs_data_dir> 
@@ -441,17 +441,22 @@ def create_poverty_dataframe(df, path_to_save, save_csv=True):
             df['deprived_mod'] = (df['sumpoor_mod'] >= 1).astype(int)
 
     # Keep only relevant variables
+    keywords = [
+        'countrycode', 'year', 'survey', 'version', 'round', 'cluster',
+        'hhid', 'indid', 'chweight', 'hhweight', 'location', 'sex',
+        'wealth', 'region', 'age', 'orphaned'
+    ]
+    prefixes = ['dep_', 'education_', 'health_', 'nutrition_']
+    substrings = ['sumpoor_', 'deprived_']
+
     columns_to_keep = [
         col for col in df.columns if (
-            'countrycode' in col or 'year' in col or 'survey' in col or 'version' in col or
-            'round' in col or 'cluster' in col or 'hhid' in col or 'indid' in col or
-            'chweight' in col or 'hhweight' in col or 'location' in col or 'sex' in col or
-            'wealth' in col or 'region' in col or 'age' in col or 'orphaned' in col or
-            col.startswith('dep_') or col.startswith('education_') or
-            col.startswith('health_') or col.startswith('nutrition_') or
-            'sumpoor_' in col or 'deprived_' in col
+            any(key in col for key in keywords) or
+            any(col.startswith(prefix) for prefix in prefixes) or
+            any(sub in col for sub in substrings)
         )
     ]
+
     df = df[columns_to_keep]
     
     # reset index
@@ -598,7 +603,7 @@ def get_health_depr(df):
 
     # reorder columns to send new variables to the end
     column_order = [col for col in df.columns if col not in ['dpt1deprived', 'dpt2deprived', 'dpt3deprived', 'measlesdeprived']] + \
-                  ['dpt1deprived', 'dpt2deprived', 'dpt3deprived', 'measlesdeprived']
+                    ['dpt1deprived', 'dpt2deprived', 'dpt3deprived', 'measlesdeprived']
     df = df[column_order]
 
     # Count missing values across the immunization indicators
@@ -1076,8 +1081,8 @@ def save_split(df, save_dir):
 
 def find_sub_file(directory, pattern:str):
     for f in os.listdir(directory):
-      if pattern.lower() in f.lower():
-        return f
+        if pattern.lower() in f.lower():
+            return f
 
 
 def make_string(integer, length = 8):

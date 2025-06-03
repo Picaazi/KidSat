@@ -16,24 +16,26 @@ from sklearn.model_selection import train_test_split
 from torch.optim import Adam
 from torch.nn import L1Loss
 import warnings
+from preparation import image_config, set_seed, CustomDataset
+from models import ViTForRegression
 warnings.filterwarnings("ignore")
+
 def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch_size, num_epochs, img_size = None):
     
-    if imagery_source == 'L':
-        normalization = 30000.
-        imagery_size = 336
-    elif imagery_source == 'S':
-        normalization = 3000.
-        imagery_size = 994
-    else:
-        raise Exception("Unsupported imagery source")
+    normalization, imagery_size = image_config(imagery_source)
+    # if imagery_source == 'L':
+    #     normalization = 30000.
+    #     imagery_size = 336
+    # elif imagery_source == 'S':
+    #     normalization = 3000.
+    #     imagery_size = 994
+    # else:
+    #     raise Exception("Unsupported imagery source")
     
     if not img_size is None:
         imagery_size = img_size
+        
     data_folder = r'survey_processing/processed_data'
-
-    train_df = pd.read_csv(f'{data_folder}/train_fold_{fold}.csv')
-    test_df = pd.read_csv(f'{data_folder}/test_fold_{fold}.csv')
 
     available_imagery = []
     for d in os.listdir(imagery_path):
@@ -46,6 +48,10 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
             if centroid_id in centroid:
                 return True
         return False
+    
+    train_df = pd.read_csv(f'{data_folder}/train_fold_{fold}.csv')
+    test_df = pd.read_csv(f'{data_folder}/test_fold_{fold}.csv')
+    
     train_df = train_df[train_df['CENTROID_ID'].apply(is_available)]
     test_df = test_df[test_df['CENTROID_ID'].apply(is_available)]
 
@@ -153,6 +159,8 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
         }, filename)
 
     torch.cuda.empty_cache()
+    
+
     class ViTForRegressionWithUncertainty(nn.Module):
         def __init__(self, base_models, grouped_bands=[[4, 3, 2], [8, 4, 2], [13, 1, 3], [12, 8, 2]], emb_size=768, predict_target=1):
             super().__init__()
@@ -218,6 +226,7 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
         # Calculate the negative log-likelihood
         loss = 0.5 * ((mean - targets) ** 2) / variance + 0.5 * torch.log(variance)
         return torch.mean(loss)
+    
     loss_fn = nll_loss
     for epoch in range(epochs_ran+1, num_epochs):
         torch.cuda.empty_cache()
