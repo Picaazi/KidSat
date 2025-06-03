@@ -36,7 +36,7 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
     last_model = f'modelling/dino/model/{model_name}_{fold}_{str(grouped_bands)}all_cluster_last_{imagery_source}{target}_.pth'
 
 
-    train_df, test_df, predict_target = get_datasets(train_df, test_df, imagery_path, imagery_source)
+    train_df, test_df, predict_target = get_datasets(train_df, test_df, imagery_path, imagery_source, target)
     # available_imagery = []
     # for d in os.listdir(imagery_path):
     #     if d[-2] == imagery_source:

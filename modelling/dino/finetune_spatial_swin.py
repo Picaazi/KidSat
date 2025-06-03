@@ -19,7 +19,7 @@ from torch.nn import L1Loss
 import warnings
 warnings.filterwarnings("ignore")
 import sys
-from preparation import set_seed, CustomDataset, save_checkpoint
+from preparation import set_seed, CustomDataset, save_checkpoint, get_datasets
 from models import ViTForRegression
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
@@ -48,44 +48,46 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
     data_folder = r'survey_processing/processed_data'
     train_df = pd.read_csv(f'{data_folder}/train_fold_{fold}.csv')
     test_df = pd.read_csv(f'{data_folder}/test_fold_{fold}.csv')
+    
+    train_df, test_df, predict_target = get_datasets(train_df, test_df, imagery_path, imagery_source, target)
 
-    available_imagery = []
-    for d in os.listdir(imagery_path):
-        if d[-2] == imagery_source:
-            for f in os.listdir(os.path.join(imagery_path, d)):
-                available_imagery.append(os.path.join(imagery_path, d, f))
+    # available_imagery = []
+    # for d in os.listdir(imagery_path):
+    #     if d[-2] == imagery_source:
+    #         for f in os.listdir(os.path.join(imagery_path, d)):
+    #             available_imagery.append(os.path.join(imagery_path, d, f))
 
-    def is_available(centroid_id):
-        for centroid in available_imagery:
-            if centroid_id in centroid:
-                return True
-        return False
-    train_df = train_df[train_df['CENTROID_ID'].apply(is_available)]
-    test_df = test_df[test_df['CENTROID_ID'].apply(is_available)]
+    # def is_available(centroid_id):
+    #     for centroid in available_imagery:
+    #         if centroid_id in centroid:
+    #             return True
+    #     return False
+    # train_df = train_df[train_df['CENTROID_ID'].apply(is_available)]
+    # test_df = test_df[test_df['CENTROID_ID'].apply(is_available)]
 
-    def filter_contains(query):
-        # Returns a list of items that contain the given query substring.
-        # Use a list comprehension to filter items
-        for item in available_imagery:
-            if query in item:
-                return item
-    train_df['imagery_path'] = train_df['CENTROID_ID'].apply(filter_contains)
-    test_df['imagery_path'] = test_df['CENTROID_ID'].apply(filter_contains)
-    if target == '':
-        predict_target = ['h10', 'h3', 'h31', 'h5', 'h7', 'h9', 
-                        'hc70', 'hv109', 'hv121', 'hv106', 'hv201', 
-                        'hv204', 'hv205', 'hv216', 'hv225', 'hv271', 'v312']
-    else:
-        predict_target = [target]
+    # def filter_contains(query):
+    #     # Returns a list of items that contain the given query substring.
+    #     # Use a list comprehension to filter items
+    #     for item in available_imagery:
+    #         if query in item:
+    #             return item
+    # train_df['imagery_path'] = train_df['CENTROID_ID'].apply(filter_contains)
+    # test_df['imagery_path'] = test_df['CENTROID_ID'].apply(filter_contains)
+    # if target == '':
+    #     predict_target = ['h10', 'h3', 'h31', 'h5', 'h7', 'h9', 
+    #                     'hc70', 'hv109', 'hv121', 'hv106', 'hv201', 
+    #                     'hv204', 'hv205', 'hv216', 'hv225', 'hv271', 'v312']
+    # else:
+    #     predict_target = [target]
 
-    filtered_predict_target = []
-    for col in predict_target:
-        filtered_predict_target.extend(
-            [c for c in train_df.columns if c == col or re.match(f"^{col}_[^a-zA-Z]", c)]
-        )
-    # Drop rows with NaN values in the filtered subset of columns
-    train_df = train_df.dropna(subset=filtered_predict_target)
-    predict_target = sorted(filtered_predict_target)
+    # filtered_predict_target = []
+    # for col in predict_target:
+    #     filtered_predict_target.extend(
+    #         [c for c in train_df.columns if c == col or re.match(f"^{col}_[^a-zA-Z]", c)]
+    #     )
+    # # Drop rows with NaN values in the filtered subset of columns
+    # train_df = train_df.dropna(subset=filtered_predict_target)
+    # predict_target = sorted(filtered_predict_target)
 
     # def load_and_preprocess_image(path):
     #     with rasterio.open(path) as src:
