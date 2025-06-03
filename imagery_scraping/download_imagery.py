@@ -157,7 +157,7 @@ def download_imagery(filepath, drive, year, sensor, range_km, rgb_only,  dimensi
     - NotImplementedError: If an unsupported sensor is requested.
     """
     ee.Authenticate()
-    project_name = get_project_name()
+    project_name = get_project_name('imagery_scraping/config/google_config.json')
     ee.Initialize(project = project_name)
 
     is_csv = filepath[-4:] == '.csv'

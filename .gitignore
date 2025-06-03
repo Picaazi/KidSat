@@ -166,6 +166,7 @@ cython_debug/
 # conda env & data folder
 satellite/
 pretrained_models/
+data/
 model_output/
 rgb/
 full_img/
@@ -183,8 +184,10 @@ test*
 archived*
 afr_adm*
 *.npy
-
-
-
+logs/
+*.sh
+*.err
 .idea
 .DS_Store
+.dependencies_installed
+

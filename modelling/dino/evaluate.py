@@ -46,14 +46,14 @@ def evaluate(
 
     # Build checkpoint filename (pth file) based on mode and target
     if use_checkpoint:
-        named_target = target if model_not_named_target else ""
-        if mode == "temporal":
-            checkpoint = f"{model_par_dir}{model_name}_temporal_best_{imagery_source}{named_target}_.pth"
-        elif mode == "spatial":
-            checkpoint = f"{model_par_dir}{model_name}_{fold}_{grouped_bands}all_cluster_best_{imagery_source}{named_target}_.pth"
-        elif mode == "one_country":
-            checkpoint = f"{model_par_dir}{model_name}_{fold}_one_country_best_{imagery_source}{named_target}_.pth"
-        else:
+       named_target = target if model_not_named_target else ""
+       if mode == 'temporal':
+            checkpoint = f'{model_par_dir}{model_name}_temporal_best_{imagery_source}{named_target}_.pth'
+       elif mode == 'spatial':
+            checkpoint = f'{model_par_dir}{model_name}_{fold}_Noneall_cluster_best_{imagery_source}{named_target}_.pth'
+       elif mode == 'one_country':
+            checkpoint = f'{model_par_dir}{model_name}_{fold}_one_country_best_{imagery_source}{named_target}_.pth'
+       else:
             raise Exception(mode)
 
     print(
