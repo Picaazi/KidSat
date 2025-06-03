@@ -93,7 +93,6 @@ class CustomTemporalDataset(CustomDataset):
         self.cache[idx] = (image_tensor, timestamp, target)  # Adjust based on actual output of feature_extractor
 
 
-
 def get_datasets(dhs_path, imagery_path, predict_target, temporal=False, split=True, seed=42, landsat=True, train=True, multispectral = False, img_size = 224):
     print("Dataset path:", dhs_path)
     df = pd.read_csv(dhs_path, index_col=False)

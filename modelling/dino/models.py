@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-
     
 class ClippedReLU(nn.Module):
     def __init__(self, max_value=1.0):
@@ -60,7 +59,7 @@ class ViTForRegressionWithUncertainty(nn.Module):
                 └─────────────────────────────┘
 
     '''
-        def __init__(self, base_models, grouped_bands=[[4, 3, 2], [8, 4, 2], [13, 1, 3], [12, 8, 2]], emb_size=768, predict_target=1):
+        def __init__(self, base_models, grouped_bands=[[4, 3, 2], [8, 4, 2], [13, 1, 3], [12, 8, 2]], emb_size=768, predict_size=1):
             super().__init__()
             self.base_models = nn.ModuleList(base_models)
             self.grouped_bands = torch.tensor(grouped_bands) - 1
@@ -68,7 +67,7 @@ class ViTForRegressionWithUncertainty(nn.Module):
             
             # Update the regression head to output both mean and uncertainty
             # The output size is doubled to handle both prediction (mean) and log variance
-            self.regression_head = nn.Linear(emb_size * len(grouped_bands), predict_target * 2)
+            self.regression_head = nn.Linear(emb_size * len(grouped_bands), predict_size * 2)
 
         def forward(self, pixel_values):
             # Extract outputs from each base model with specific band groups

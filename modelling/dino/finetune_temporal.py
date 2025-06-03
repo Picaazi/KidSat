@@ -45,7 +45,6 @@ def main(model_name, target, imagery_path, imagery_source,emb_size, batch_size, 
 
     def filter_contains(query):
         # Returns a list of items that contain the given query substring.
-        # Use a list comprehension to filter items
         for item in available_imagery:
             if query in item:
                 return item
