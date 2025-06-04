@@ -125,14 +125,14 @@ class CustomDataset(Dataset):
 
     def __getitem__(self, idx):
         item = self.dataframe.iloc[idx]
-        if all:
+        if self.all:
             image = load_and_preprocess_image_all(item['imagery_path'], self.normalization)
         else:
             image = load_and_preprocess_image(item['imagery_path'], self.normalization, self.grouped_bands)
         # Apply feature extractor if necessary, might need adjustments
         image_tensor = self.transform(Image.fromarray(image))
         
-        # Assuming your target is a single scalar
+        # Assuming your target is a single scalar                                                                                                                                                                                                                                                                                                                                                                                                      
         target = torch.tensor(item[self.predict_target], dtype=torch.float32)
         return image_tensor, target  # Adjust based on actual output of feature_extractor
 
