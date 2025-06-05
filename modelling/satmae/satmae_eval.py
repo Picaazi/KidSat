@@ -32,11 +32,11 @@ SATMAE_PATHS = [
     (None, 3),
     (None, 4),
     (None, 5),
-    ("modelling/satmae/model/31ac40ec-5/model_1_best_nl.pth", 1),
-    ("modelling/satmae/model/31ac40ec-5/model_1_best_nl.pth", 2),
-    ("modelling/satmae/model/31ac40ec-5/model_1_best_nl.pth", 3),
-    ("modelling/satmae/model/31ac40ec-5/model_1_best_nl.pth", 4),
-    ("modelling/satmae/model/31ac40ec-5/model_1_best_nl.pth", 5),
+    ("model_checkpoints/satmae/satmae_fold_1/4b4ee8c8-9/model_2020_best_nl.pth", 1),
+    ("model_checkpoints/satmae/satmae_fold_2/b8078183-5/model_2020_best_nl.pth", 2),
+    ("model_checkpoints/satmae/satmae_fold_3/4b9b9754-9/model_2020_best_nl.pth", 3),
+    ("model_checkpoints/satmae/satmae_fold_4/abd4e4ac-1/model_2020_best_nl.pth", 4),
+    ("model_checkpoints/satmae/satmae_fold_5/995271c8-4/model_2020_best_nl.pth", 5),
 ]
 
 # Here is for the temporal model, remember to set the --temporal flag.
@@ -175,7 +175,7 @@ def main(args, fold, name, outdir=None, model=None, loaders=None):
                 pretrained_model=(
                     "/home/jupyter/ckpts/pretrain_fmow_temporal.pth"
                     if args.temporal
-                    else 'modelling/satmae/chpt/finetune-vit-large-e7.pth'
+                    else 'pretrained_checkpoints/satmae/fmow_pretrain.pth'
                 ),
             )
         )

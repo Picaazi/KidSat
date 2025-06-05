@@ -43,11 +43,10 @@ def ridge_cv(fold, dhs_vect_path):
 
 
 def evaluate(paths, name):
-    train_losses = []
-    test_losses = []
 
     print("\n\n================================")
     print(name, "\n")
+    '''
     for fold, dhs_vect_path in enumerate(paths, start=2):
         print("Evaluating fold", fold)
         train_l1, test_l1 = ridge_cv(fold, dhs_vect_path)
@@ -58,19 +57,42 @@ def evaluate(paths, name):
     print(name)
     print("Mean MAE:", np.mean(test_losses))
     print("Std MAE:", np.std(test_losses) / np.sqrt(len(paths)))
+    '''
+    for path in paths:
+        train_losses = []
+        test_losses = []
+        print(f'Evaluating for {path}')
+
+        for fold in range(1, 6):
+            print(f'Evaluating fold {fold}')
+            train_l1, test_l1 = ridge_cv(fold, path)
+            train_losses.append(train_l1)
+            test_losses.append(test_l1)
+            print("--------------------\n")
+        
+        print(name)
+        print("Mean MAE:", np.mean(test_losses))
+        print("Std MAE:", np.std(test_losses) / np.sqrt(len(paths)))
+        print("-"*50, '\n')
+
 
 
 evaluate(
     [
-        "/data/output/a682cd00-4",
-        "/data/output/b75a58b9-8",
-        "/data/output/e57bcec7-8",
-        "/data/output/e6de728a-0",
-        "/data/output/567b27af-b",
+        'results/satmae_ms_spatial/920f6905-9'
     ],
-    "SatMAE-L Raw",
+    "SatMAE-ms fine-tuned",
 )
 
+evaluate(
+    [
+        'results/satmae_spatial/7e4d8ccc-9',
+        'results/satmae_spatial/331d683f-d'
+    ],
+    "SatMAE-L fine-tuned"
+)
+
+'''
 evaluate(
     [
         "/data/output/c20b97b6-d",
@@ -132,3 +154,4 @@ evaluate(
     ],
     "SatMAE-ST Finetuned",
 )
+'''

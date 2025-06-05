@@ -33,7 +33,7 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
     test_df = pd.read_csv(f'{data_folder}/test_fold_{fold}.csv')
     
     best_model = f'modelling/dino/model/{model_name}_{fold}_{str(grouped_bands)}all_cluster_best_{imagery_source}{target}_.pth'
-    last_model = f'modelling/dino/model/{model_name}_{fold}_{str(grouped_bands)}all_cluster_last_{imagery_source}{target}_.pth'
+    last_model = f'1modelling/dino/model/{model_name}_{fold}_{str(grouped_bands)}all_cluster_last_{imagery_source}{target}_.pth'
 
 
     train_df, test_df, predict_target = get_datasets(train_df, test_df, imagery_path, imagery_source, target)

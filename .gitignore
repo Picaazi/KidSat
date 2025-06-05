@@ -184,6 +184,14 @@ test*
 archived*
 afr_adm*
 *.npy
+
+
+
+.idea
+.DS_Store
+*.out
+
+
 logs/
 *.sh
 *.err

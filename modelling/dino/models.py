@@ -22,7 +22,7 @@ class ViTForRegression(nn.Module):
             
             # Use sigmoid activation if specified, otherwise use ClippedReLU (sigmoid is inputed in the command line)
             if activation == "sigmoid":
-                self.activation =  nn.Sigmoid()
+                self.activation = nn.Sigmoid()
             elif activation == "clipped_relu":
                 self.activation = ClippedReLU()
             else:
