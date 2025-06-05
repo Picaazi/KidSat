@@ -240,3 +240,45 @@ def evaluate(
     print("Test Score (negative MAE):", test_score)
 
     return test_score
+
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Run satellite image processing model training.')
+    parser.add_argument('--fold', type=str, default='1', help='The fold number')
+    parser.add_argument('--model_name', type=str, default='dinov2_vitb14', help='The model name')
+    parser.add_argument('--target', type=str,default='', help='The target variable')
+    parser.add_argument('--imagery_source', type=str, default='L', help='L for Landsat and S for Sentinel')
+    parser.add_argument('--imagery_path', type=str, help='The parent directory of all imagery')
+    parser.add_argument('--mode', type=str, default='temporal', help='Evaluating temporal model or spatial model')
+    parser.add_argument('--model_output_dim', type=int, default=768, help='The output dimension of the model')
+    parser.add_argument('--use_checkpoint', action='store_true', help='Whether to use checkpoint file. If not, use raw model.')
+    parser.add_argument('--model_not_named_target', action='store_false', help='Whether the model name contains the target variable')
+    parser.add_argument('--grouped_bands', nargs='+', type=int, help="List of grouped bands")
+    
+    args = parser.parse_args()
+    maes = []
+    if args.mode == 'temporal':
+        print(evaluate("1", args.model_name,args.target, args.use_checkpoint,args.model_not_named_target, args.imagery_path, args.imagery_source, args.mode,  args.model_output_dim))
+    elif args.mode == 'spatial':
+        for i in range(5):
+            fold = i + 1
+            mae = evaluate(str(fold), args.model_name, args.target, args.use_checkpoint,args.model_not_named_target,args.imagery_path, args.imagery_source, args.mode, args.model_output_dim, grouped_bands=args.grouped_bands)
+            maes.append(mae)
+        print(np.mean(maes), np.std(maes)/np.sqrt(5))
+    elif args.mode == 'one_country':
+        COUNTRIES = ['Madagascar', 'Burundi', 'Uganda', 'Mozambique', 'Rwanda',
+                    'Zambia', 'Tanzania', 'Malawi', 'Ethiopia', 'Kenya', 'Zimbabwe',
+                    'Lesotho', 'South Africa', 'Angola', 'Eswatini', 'Comoros']
+        
+        n_samples = len(COUNTRIES)
+        for country in COUNTRIES:
+            try:
+                mae = evaluate(country, args.model_name, args.target, args.use_checkpoint,args.model_not_named_target,args.imagery_path, args.imagery_source, args.mode, args.model_output_dim)
+                maes.append(mae)
+            except Exception as e:
+                print(f"Error in {country}: {e}")
+                n_samples -= 1
+        print(np.mean(maes), np.std(maes)/np.sqrt(n_samples))
+    else:
+        raise Exception("Invalid mode")

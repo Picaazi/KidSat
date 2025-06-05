@@ -25,24 +25,24 @@ except ImportError:
 
 # Please change this accordingly. The example one is LandSat non-temporal.
 # The first 5 are the non-finetuned models, the rest are the finetuned model.
-# SATMAE_PATHS = [
-#     # (None, 1),
-#     # (None, 2),
-#     # (None, 3),
-#     # (None, 4),
-#     # (None, 5),
-#     ("modelling/satmae/model/51968d5a-4/model_1_best_nl.pth", 1),
-#     ("modelling/satmae/model/bec97c73-c/model_2_best_nl.pth", 2),
-#     ("modelling/satmae/model/ebd26bf8-8/model_3_best_nl.pth", 3),
-#     ("modelling/satmae/model/1cf7717d-b/model_4_best_nl.pth", 4),
-#     ("modelling/satmae/model/fc05d245-8/model_5_best_nl.pth", 5),
-# ]
+SATMAE_PATHS = [
+    # (None, 1),
+    # (None, 2),
+    # (None, 3),
+    # (None, 4),
+    # (None, 5),
+    ("model_checkpoints/satmae/satmae_ms_fold_1/21edd762-6/model_1_best_nl.pth", 1),
+    ("model_checkpoints/satmae/satmae_ms_fold_2/535593b9-2/model_2_best_nl.pth", 2),
+    ("model_checkpoints/satmae/satmae_ms_fold_3/62ab71d6-d/model_3_best_nl.pth", 3),
+    ("model_checkpoints/satmae/satmae_ms_fold_4/3b6aef64-7/model_4_best_nl.pth", 4),
+    ("model_checkpoints/satmae/satmae_ms_fold_5/be3158a7-4/model_5_best_nl.pth", 5),
+]
 
 # Here is for the temporal model, remember to set the --temporal flag.
-SATMAE_PATHS = [
-    (None, 0),
-    ("modelling/satmae/model/4df43acf-d/model_t_best_nl.pth", 0),
-]
+#SATMAE_PATHS = [
+#    (None, 0),
+#    ("modelling/satmae/model/4df43acf-d/model_t_best_nl.pth", 0),
+# ]
 
 assert torch.cuda.is_available(), "Using GPU is strongly recommended"
 device = torch.device("cuda" if torch.cuda.is_available() else "CPU")
@@ -163,7 +163,7 @@ def main(args, fold, name, outdir=None, model=None, loaders=None):
                 img_size=args.img_size,
                 patch_size=8,
                 in_chans=13,
-                pretrained_model='modelling/satmae/chpt/finetune-vit-large-e7.pth'
+                pretrained_model='pretrained_checkpoints/satmae/fmow_pretrain.pth'
                 # pretrained_model=None
             )
         )

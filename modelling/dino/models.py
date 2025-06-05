@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-
     
 class ClippedReLU(nn.Module):
     def __init__(self, max_value=1.0):
@@ -11,22 +10,21 @@ class ClippedReLU(nn.Module):
         return torch.clamp(x, min=0, max=self.max_value)
     
 class ViTForRegression(nn.Module):
-        def __init__(self, base_model, projection= None, activation="sigmoid", emb_size=768, predict_target=99):
+        def __init__(self, base_model, projection= None, activation="sigmoid", emb_size=768, predict_size=99):
             super().__init__()
             self.base_model = base_model
             if projection:
                 self.projection = projection
             else:
                 self.projection = nn.Identity()
-            # Assuming the original model outputs 768 features from the transformer
-            self.regression_head = nn.Linear(emb_size, predict_target)  # Output one continuous variable
+                
+            self.regression_head = nn.Linear(emb_size, predict_size)  # Output one continuous variable
             
             # Use sigmoid activation if specified, otherwise use ClippedReLU (sigmoid is inputed in the command line)
             if activation == "sigmoid":
                 self.activation = nn.Sigmoid()
             elif activation == "clipped_relu":
                 self.activation = ClippedReLU()
-                
             else:
                 self.activation = nn.Identity()
                 
@@ -34,8 +32,6 @@ class ViTForRegression(nn.Module):
             outputs = self.base_model(self.projection(pixel_values))
             # We use the last hidden state
             return self.activation(self.regression_head(outputs))
-        
-        
         
 class ViTForRegressionWithUncertainty(nn.Module):
     
@@ -63,7 +59,7 @@ class ViTForRegressionWithUncertainty(nn.Module):
                 └─────────────────────────────┘
 
     '''
-        def __init__(self, base_models, grouped_bands=[[4, 3, 2], [8, 4, 2], [13, 1, 3], [12, 8, 2]], emb_size=768, predict_target=1):
+        def __init__(self, base_models, grouped_bands=[[4, 3, 2], [8, 4, 2], [13, 1, 3], [12, 8, 2]], emb_size=768, predict_size=1):
             super().__init__()
             self.base_models = nn.ModuleList(base_models)
             self.grouped_bands = torch.tensor(grouped_bands) - 1
@@ -71,7 +67,7 @@ class ViTForRegressionWithUncertainty(nn.Module):
             
             # Update the regression head to output both mean and uncertainty
             # The output size is doubled to handle both prediction (mean) and log variance
-            self.regression_head = nn.Linear(emb_size * len(grouped_bands), predict_target * 2)
+            self.regression_head = nn.Linear(emb_size * len(grouped_bands), predict_size * 2)
 
         def forward(self, pixel_values):
             # Extract outputs from each base model with specific band groups

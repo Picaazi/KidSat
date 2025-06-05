@@ -20,121 +20,92 @@ import warnings
 warnings.filterwarnings("ignore")
 import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
-class ClippedReLU(nn.Module):
-    def __init__(self, max_value=1.0):
-        super(ClippedReLU, self).__init__()
-        self.max_value = max_value
+from preparation import image_config, set_seed, save_checkpoint, CustomDataset, get_datasets
+from models import ViTForRegression
 
-    def forward(self, x):
-        return torch.clamp(x, min=0, max=self.max_value)
-    
 def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch_size, num_epochs, img_size = None,sigmoid = True):
-    
-    if imagery_source == 'L':
-        normalization = 30000.
-        imagery_size = 336
-    elif imagery_source == 'S':
-        normalization = 3000.
-        imagery_size = 994
-    else:
-        raise Exception("Unsupported imagery source")
-    
-    if not img_size is None:
-        imagery_size = img_size
+    normalization, imagery_size = image_config(imagery_source, img_size)
+
     data_folder = r'survey_processing/processed_data'
 
     train_df = pd.read_csv(f'{data_folder}/train_fold_{fold}.csv')
     test_df = pd.read_csv(f'{data_folder}/test_fold_{fold}.csv')
+    
+    train_df, test_df, predict_target = get_datasets(train_df, test_df, imagery_path, imagery_source)
 
-    available_imagery = []
-    for d in os.listdir(imagery_path):
-        if d[-2] == imagery_source:
-            for f in os.listdir(os.path.join(imagery_path, d)):
-                available_imagery.append(os.path.join(imagery_path, d, f))
+    # available_imagery = []
+    # for d in os.listdir(imagery_path):
+    #     if d[-2] == imagery_source:
+    #         for f in os.listdir(os.path.join(imagery_path, d)):
+    #             available_imagery.append(os.path.join(imagery_path, d, f))
 
-    def is_available(centroid_id):
-        for centroid in available_imagery:
-            if centroid_id in centroid:
-                return True
-        return False
-    train_df = train_df[train_df['CENTROID_ID'].apply(is_available)]
-    test_df = test_df[test_df['CENTROID_ID'].apply(is_available)]
+    # def is_available(centroid_id):
+    #     for centroid in available_imagery:
+    #         if centroid_id in centroid:
+    #             return True
+    #     return False
+    # train_df = train_df[train_df['CENTROID_ID'].apply(is_available)]
+    # test_df = test_df[test_df['CENTROID_ID'].apply(is_available)]
 
-    def filter_contains(query):
-        """
-        Returns a list of items that contain the given query substring.
+    # def filter_contains(query):
+    #     # Returns a list of items that contain the given query substring.
+    #     # Use a list comprehension to filter items
+    #     for item in available_imagery:
+    #         if query in item:
+    #             return item
+    # train_df['imagery_path'] = train_df['CENTROID_ID'].apply(filter_contains)
+    # test_df['imagery_path'] = test_df['CENTROID_ID'].apply(filter_contains)
+    # if target == '':
+    #     predict_target = ['h10', 'h3', 'h31', 'h5', 'h7', 'h9', 
+    #                     'hc70', 'hv109', 'hv121', 'hv106', 'hv201', 
+    #                     'hv204', 'hv205', 'hv216', 'hv225', 'hv271', 'v312']
+    # else:
+    #     predict_target = [target]
+
+    # filtered_predict_target = []
+    # for col in predict_target:
+    #     filtered_predict_target.extend(
+    #         [c for c in train_df.columns if c == col or re.match(f"^{col}_[^a-zA-Z]", c)]
+    #     )
+    # # Drop rows with NaN values in the filtered subset of columns
+    # train_df = train_df.dropna(subset=filtered_predict_target)
+    # predict_target = sorted(filtered_predict_target)
+
+    # def load_and_preprocess_image(path):
+    #     with rasterio.open(path) as src:
+    #         bands = src.read()
+    #         img = bands[:13]
+    #         img = img / normalization  # Normalize to [0, 1] (if required)
         
-        Parameters:
-            items (list of str): The list of strings to search within.
-            query (str): The substring to search for in each item of the list.
-            
-        Returns:
-            list of str: A list containing all items that have the query substring.
-        """
-        # Use a list comprehension to filter items
-        for item in available_imagery:
-            if query in item:
-                return item
-    train_df['imagery_path'] = train_df['CENTROID_ID'].apply(filter_contains)
-    test_df['imagery_path'] = test_df['CENTROID_ID'].apply(filter_contains)
-    if target == '':
-        predict_target = ['h10', 'h3', 'h31', 'h5', 'h7', 'h9', 'hc70', 'hv109', 'hv121', 'hv106', 'hv201', 'hv204', 'hv205', 'hv216', 'hv225', 'hv271', 'v312']
-    else:
-        predict_target = [target]
+    #     img = np.nan_to_num(img, nan=0, posinf=1, neginf=0)
+    #     img = np.clip(img, 0, 1)  # Clip values to be within the 0-1 range
+    #     img = np.transpose(img, (1, 2, 0))
+    #     # Scale back to [0, 255] for visualization purposes
+    #     img = (img * 255).astype(np.uint8)
 
-    filtered_predict_target = []
-    for col in predict_target:
-        filtered_predict_target.extend(
-            [c for c in train_df.columns if c == col or re.match(f"^{col}_[^a-zA-Z]", c)]
-        )
-    # Drop rows with NaN values in the filtered subset of columns
-    train_df = train_df.dropna(subset=filtered_predict_target)
-    predict_target = sorted(filtered_predict_target)
-
-    def load_and_preprocess_image(path):
-        with rasterio.open(path) as src:
-            bands = src.read()
-            img = bands[:13]
-            img = img / normalization  # Normalize to [0, 1] (if required)
-        
-        img = np.nan_to_num(img, nan=0, posinf=1, neginf=0)
-        img = np.clip(img, 0, 1)  # Clip values to be within the 0-1 range
-        img = np.transpose(img, (1, 2, 0))
-        # Scale back to [0, 255] for visualization purposes
-        img = (img * 255).astype(np.uint8)
-
-        return img
-
-    def set_seed(seed):
-        torch.manual_seed(seed)
-        torch.cuda.manual_seed(seed)
-        torch.cuda.manual_seed_all(seed)  # if you are using multi-GPU.
-        np.random.seed(seed)
-        random.seed(seed)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+    #     return img
 
     # Set your desired seed
     seed = 42
     set_seed(seed)
     train, validation = train_test_split(train_df, test_size=0.2, random_state=seed)
 
-    class CustomDataset(Dataset):
-        def __init__(self, dataframe, transform):
-            self.dataframe = dataframe
-            self.transform = transform
+    # class CustomDataset(Dataset):
+    #     def __init__(self, dataframe, transform):
+    #         self.dataframe = dataframe
+    #         self.transform = transform
 
-        def __len__(self):
-            return len(self.dataframe)
+    #     def __len__(self):
+    #         return len(self.dataframe)
 
-        def __getitem__(self, idx):
-            item = self.dataframe.iloc[idx]
-            image = load_and_preprocess_image(item['imagery_path'])
-            # Apply feature extractor if necessary, might need adjustments
-            image_tensor = self.transform(image)
-            # Assuming your target is a single scalar
-            target = torch.tensor(item[predict_target], dtype=torch.float32)
-            return image_tensor, target  # Adjust based on actual output of feature_extractor
+    #     def __getitem__(self, idx):
+    #         item = self.dataframe.iloc[idx]
+    #         image = load_and_preprocess_image(item['imagery_path'])
+    #         # Apply feature extractor if necessary, might need adjustments
+    #         image_tensor = self.transform(image)
+    #         # Assuming your target is a single scalar
+    #         target = torch.tensor(item[predict_target], dtype=torch.float32)
+    #         return image_tensor, target  # Adjust based on actual output of feature_extractor
 
     transform = transforms.Compose([
         transforms.ToTensor(),  # Convert the image to a PyTorch tensor
@@ -142,8 +113,8 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
         # transforms.Normalize(mean=[0.5] * 13, std=[0.22] * 13),  # Normalize with ImageNet's mean and std
     ])
 
-    train_dataset = CustomDataset(train, transform)
-    val_dataset = CustomDataset(validation, transform)
+    train_dataset = CustomDataset(train, transform, normalization, predict_target, all=True)
+    val_dataset = CustomDataset(validation, transform, normalization, predict_target, all=True)
 
     # train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=batch_size+4)
     # val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=batch_size+4)
@@ -177,37 +148,13 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
     # Move the updated model to the device
     base_model = base_model.to(device)
 
-    # Save the model state and optimizer state
-    def save_checkpoint(model, optimizer, epoch, loss, filename="checkpoint.pth"):
-        torch.save({
-            'epoch': epoch,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'loss': loss
-        }, filename)
-
     torch.cuda.empty_cache()
     projection = BandSelector().to(device)
-    class ViTForRegression(nn.Module):
-        def __init__(self, base_model, projection):
-            super().__init__()
-            self.base_model = base_model
-            self.projection = projection
-            # Assuming the original model outputs 768 features from the transformer
-            self.regression_head = nn.Linear(emb_size, len(predict_target))  # Output one continuous variable
-            
-            # Use sigmoid activation if specified, otherwise use ClippedReLU (sigmoid is inputed in the command line)
-            if sigmoid:
-                self.activation = nn.Sigmoid()
-            else:
-                self.activation = ClippedReLU()
-        def forward(self, pixel_values):
-            outputs = self.base_model(self.projection(pixel_values))
-            # We use the last hidden state
-            return self.activation(self.regression_head(outputs))
 
     print(f"Using {device}")
-    model = ViTForRegression(base_model, projection).to(device)
+    act_name = 'sigmoid' if sigmoid else 'clipped_relu'
+    model = ViTForRegression(base_model, projection, activation = act_name, emb_size=emb_size, predict_size=len(predict_target)).to(device)
+    
     best_model = f'modelling/dino/model/{model_name}_{fold}_all_cluster_best_{imagery_source}{target}_.pth'
     last_model = f'modelling/dino/model/{model_name}_{fold}_all_cluster_last_{imagery_source}{target}_.pth'
     
@@ -249,6 +196,7 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
             loss.backward()
             optimizer.step()
         torch.cuda.empty_cache()
+        
         # Validation phase
         model.eval()
         val_loss = []

@@ -118,8 +118,12 @@ def build_satmae_ms_finetune(args):
     
         for k in [
             "pos_embed",
-            "patch_embed.proj.weight",
-            "patch_embed.proj.bias",
+            "patch_embed.0.proj.weight",
+            "patch_embed.0.proj.bias",
+            "patch_embed.1.proj.weight",
+            "patch_embed.1.proj.bias",
+            "patch_embed.2.proj.weight",
+            "patch_embed.2.proj.bias",
             "head.weight",
             "head.bias",
         ]:

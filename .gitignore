@@ -195,5 +195,7 @@ afr_adm*
 logs/
 *.sh
 *.err
+.idea
+.DS_Store
 .dependencies_installed
 
