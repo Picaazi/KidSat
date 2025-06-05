@@ -24,8 +24,8 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
     
     normalization, imagery_size = image_config(imagery_source, img_size)
     
-    if grouped_bands is None:
-        grouped_bands = [4, 3, 2]
+    # if grouped_bands is None:
+    #     grouped_bands = [4, 3, 2]
         
     data_folder = r'survey_processing/processed_data'
     

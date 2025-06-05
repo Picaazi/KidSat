@@ -191,3 +191,8 @@ logs/
 .DS_Store
 .dependencies_installed
 
+imagery/
+.tif
+model_checkpoints/
+survey_processing/dhs_data/
+survey_processing/processed_data/

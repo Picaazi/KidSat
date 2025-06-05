@@ -111,7 +111,7 @@ def set_seed(seed):
     torch.backends.cudnn.benchmark = False
     
 class CustomDataset(Dataset):
-    def __init__(self, dataframe, transform, normalization, predict_target, grouped_bands=[4, 3, 2], all = False):
+    def __init__(self, dataframe, transform, normalization, predict_target, grouped_bands=None, all = False):
         self.dataframe = dataframe
         self.transform = transform
         
@@ -125,10 +125,22 @@ class CustomDataset(Dataset):
 
     def __getitem__(self, idx):
         item = self.dataframe.iloc[idx]
-        if self.all:
-            image = load_and_preprocess_image_all(item['imagery_path'], self.normalization)
+        path = item['imagery_path']
+        gb = [4,3,2]
+        if self.grouped_bands is None:
+            if "L7" in path or "L5" in path:
+                gb = [3, 2, 1] 
+            elif "L8" in path or "S2" in path:
+                gb = [4, 3, 2]
+            else:
+                print("No satilite found, idk what band to use")
         else:
-            image = load_and_preprocess_image(item['imagery_path'], self.normalization, self.grouped_bands)
+            gb = self.grouped_bands
+            
+        if self.all:
+            image = load_and_preprocess_image_all(path, self.normalization)
+        else:
+            image = load_and_preprocess_image(path, self.normalization, gb)
         # Apply feature extractor if necessary, might need adjustments
         image_tensor = self.transform(Image.fromarray(image))
         

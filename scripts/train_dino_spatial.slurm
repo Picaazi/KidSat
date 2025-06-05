@@ -15,14 +15,13 @@
 echo "Start time: $(date)"
 
 # Set up environment
-export PYTHONPATH="/user/work/cy23765/kidsat_test/KidSat:$PYTHONPATH"
-export CUDA_VISIBLE_DEVICES=0
+export PYTHONPATH="/user/work/$USER/KidSat:$PYTHONPATH"
 
 # Create directories
-mkdir -p /user/work/cy23765/kidsat_test/KidSat/logs
-mkdir -p /user/work/cy23765/kidsat_test/KidSat/model_checkpoints/dino_spatial
+mkdir -p /user/work/$USER/KidSat/logs
+mkdir -p /user/work/$USER/KidSat/model_checkpoints/dino_spatial
 
-cd /user/work/cy23765/kidsat_test/KidSat
+cd /user/work/$USER/KidSat
 
 # TRAINING: Fine-tune DINOv2 for spatial prediction
 python modelling/dino/finetune_spatial.py \

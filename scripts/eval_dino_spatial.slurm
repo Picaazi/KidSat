@@ -13,12 +13,12 @@
 
 
 echo "Start time: $(date)"
-export PYTHONPATH="/user/work/cy23765/kidsat_test/KidSat:$PYTHONPATH"
+export PYTHONPATH="/user/work/$USER/KidSat:$PYTHONPATH"
 export CUDA_VISIBLE_DEVICES=0
 
-mkdir -p /user/work/cy23765/kidsat_test/KidSat/results/dino_spatial
+mkdir -p /user/work/$USER/KidSat/results/dino_spatial
 
-cd /user/work/cy23765/kidsat_test/KidSat
+cd /user/work/$USER/kidsat_test/KidSat
 
 # EVALUATION: Test the fine-tuned DINOv2 model
 python modelling/dino/evaluate.py \
@@ -26,8 +26,10 @@ python modelling/dino/evaluate.py \
     --imagery_path data/imagery \
     --mode spatial \
     --use_checkpoint \
-    --grouped_bands 4 3 2\
+    
     > results/dino_spatial/evaluation.log 2>&1
+
+    # --grouped_bands 4 3 2\
 
 
 echo "Job completed at: $(date)"
