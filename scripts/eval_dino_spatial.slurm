@@ -27,6 +27,7 @@ python modelling/dino/evaluate.py \
     --mode spatial \
     --use_checkpoint \
     --grouped_bands 4 3 2\
+    --country ET \
     > results/dino_spatial/evaluation.log 2>&1
 
 

@@ -16,7 +16,6 @@ echo "Start time: $(date)"
 
 # Set up environment
 export PYTHONPATH="/user/work/cy23765/kidsat_test/KidSat:$PYTHONPATH"
-export CUDA_VISIBLE_DEVICES=0
 
 # Create directories
 mkdir -p /user/work/cy23765/kidsat_test/KidSat/logs
@@ -31,7 +30,8 @@ python modelling/dino/finetune_spatial.py \
     --imagery_path data/imagery \
     --imagery_source L \
     --batch_size 8 \
-    --num_epochs 20 
+    --num_epochs 20 \
+    --country ET \
 
 echo "Job completed at: $(date)"
 echo "DINOv2 spatial training fold $SLURM_ARRAY_TASK_ID completed"

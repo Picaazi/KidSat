@@ -198,4 +198,5 @@ logs/
 .idea
 .DS_Store
 .dependencies_installed
+survey_processing/dhs_data/*
 

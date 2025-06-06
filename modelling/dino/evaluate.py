@@ -41,23 +41,25 @@ def evaluate(
     mode="temporal",
     model_output_dim=768,
     grouped_bands=None,
+    country=None,
 ):
     model_par_dir = "modelling/dino/model/"
+    country_suffix = f'_{country.upper()}' if country else ''
 
     # Build checkpoint filename (pth file) based on mode and target
     if use_checkpoint:
         named_target = target if model_not_named_target else ""
         if mode == "temporal":
-            checkpoint = f"{model_par_dir}{model_name}_temporal_best_{imagery_source}{named_target}_.pth"
+            checkpoint = f"{model_par_dir}{model_name}_temporal_best_{imagery_source}{named_target}{country_suffix}.pth"
         elif mode == "spatial":
-            checkpoint = f"{model_par_dir}{model_name}_{fold}_{grouped_bands}all_cluster_best_{imagery_source}{named_target}_.pth"
+            checkpoint = f"{model_par_dir}{model_name}_{fold}_{grouped_bands}all_cluster_best_{imagery_source}{named_target}{country_suffix}.pth"
         elif mode == "one_country":
-            checkpoint = f"{model_par_dir}{model_name}_{fold}_one_country_best_{imagery_source}{named_target}_.pth"
+            checkpoint = f"{model_par_dir}{model_name}_{fold}_one_country_best_{imagery_source}{named_target}{country_suffix}.pth"
         else:
             raise Exception(mode)
 
     print(
-        f"Evaluating {model_name} on fold {fold} with target {target} using checkpoint {checkpoint if use_checkpoint else 'None'}"
+        f"Evaluating {model_name} on fold {fold} {f'for country {country_suffix}' if country else '' }with target {target} using checkpoint {checkpoint if use_checkpoint else 'None'}"
     )
 
     # Determine size of target
@@ -80,8 +82,8 @@ def evaluate(
         train_df = pd.read_csv(f"{data_folder}before_2020.csv")
         test_df = pd.read_csv(f"{data_folder}after_2020.csv")
     else:
-        train_df = pd.read_csv(f"{data_folder}train_fold_{fold}.csv")
-        test_df = pd.read_csv(f"{data_folder}test_fold_{fold}.csv")
+        train_df = pd.read_csv(f"{data_folder}train_fold_{fold}{country_suffix}.csv")
+        test_df = pd.read_csv(f"{data_folder}test_fold_{fold}{country_suffix}.csv")
 
     # Filter out imagery files that match the source type (L or S)
     available_imagery = [
@@ -208,7 +210,7 @@ def evaluate(
 
     # Save extracted features and targets to CSV
     results_folder = (
-        f"modelling/dino/results/split_{mode}{imagery_source}_{fold}_{grouped_bands}/"
+        f"modelling/dino/results/split_{mode}{imagery_source}_{fold}_{grouped_bands}{country_suffix}/"
     )
     if not os.path.exists(results_folder):
         os.makedirs(results_folder)
@@ -255,7 +257,8 @@ if __name__ == '__main__':
     parser.add_argument('--use_checkpoint', action='store_true', help='Whether to use checkpoint file. If not, use raw model.')
     parser.add_argument('--model_not_named_target', action='store_false', help='Whether the model name contains the target variable')
     parser.add_argument('--grouped_bands', nargs='+', type=int, help="List of grouped bands")
-    
+    parser.add_argument('--country', type=str, help='Two-letter country code for single country training (e.g., ET, KE)')
+
     args = parser.parse_args()
     maes = []
     if args.mode == 'temporal':
@@ -263,7 +266,7 @@ if __name__ == '__main__':
     elif args.mode == 'spatial':
         for i in range(5):
             fold = i + 1
-            mae = evaluate(str(fold), args.model_name, args.target, args.use_checkpoint,args.model_not_named_target,args.imagery_path, args.imagery_source, args.mode, args.model_output_dim, grouped_bands=args.grouped_bands)
+            mae = evaluate(str(fold), args.model_name, args.target, args.use_checkpoint,args.model_not_named_target,args.imagery_path, args.imagery_source, args.mode, args.model_output_dim, grouped_bands=args.grouped_bands, country=args.country)
             maes.append(mae)
         print(np.mean(maes), np.std(maes)/np.sqrt(5))
     elif args.mode == 'one_country':

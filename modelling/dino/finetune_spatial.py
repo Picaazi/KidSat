@@ -20,7 +20,7 @@ from preparation import image_config, set_seed, CustomDataset, save_checkpoint, 
 from models import ViTForRegression
 warnings.filterwarnings("ignore")
 
-def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch_size, num_epochs, img_size = None, grouped_bands = None):
+def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch_size, num_epochs, img_size = None, grouped_bands = None, country = None):
     
     normalization, imagery_size = image_config(imagery_source, img_size)
     
@@ -28,12 +28,17 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
         grouped_bands = [4, 3, 2]
         
     data_folder = r'survey_processing/processed_data'
+    country_suffix = f'_{country.upper()}' if country else ''
     
-    train_df = pd.read_csv(f'{data_folder}/train_fold_{fold}.csv')
-    test_df = pd.read_csv(f'{data_folder}/test_fold_{fold}.csv')
+    train_df = pd.read_csv(f'{data_folder}/train_fold_{fold}{country_suffix}.csv')
+    test_df = pd.read_csv(f'{data_folder}/test_fold_{fold}{country_suffix}.csv')
     
-    best_model = f'modelling/dino/model/{model_name}_{fold}_{str(grouped_bands)}all_cluster_best_{imagery_source}{target}_.pth'
-    last_model = f'1modelling/dino/model/{model_name}_{fold}_{str(grouped_bands)}all_cluster_last_{imagery_source}{target}_.pth'
+    best_model = f'modelling/dino/model/{model_name}_{fold}_{str(grouped_bands)}all_cluster_best_{imagery_source}{target}{country_suffix}.pth'
+    last_model = f'modelling/dino/model/{model_name}_{fold}_{str(grouped_bands)}all_cluster_last_{imagery_source}{target}{country_suffix}.pth'
+    
+    print(f"Model files:")
+    print(f"  Best: {best_model}")
+    print(f"  Last: {last_model}")
 
 
     train_df, test_df, predict_target = get_datasets(train_df, test_df, imagery_path, imagery_source, target)
@@ -188,6 +193,15 @@ if __name__ == '__main__':
     parser.add_argument('--num_epochs', type=int, default=20, help='Number of epochs for training')
     parser.add_argument('--imagery_size', type=int, help='Size of the imagery')
     parser.add_argument('--grouped_bands', type=int, nargs=3, help='Three integer grouped bands (e.g., 4 3 2)')
+    parser.add_argument('--country', type=str, help='Two-letter country code for single country training (e.g., ET, KE)')
+
     args = parser.parse_args()
+
+    # Validate country code if provided
+    if args.country:
+        args.country = args.country.upper()
+        if len(args.country) != 2:
+            raise ValueError("Country code must be exactly 2 letters (e.g., ET, KE)")
+        
     main(args.fold, args.model_name, args.target, args.imagery_path, args.imagery_source,
-        args.emb_size, args.batch_size, args.num_epochs, args.imagery_size, args.grouped_bands)
+        args.emb_size, args.batch_size, args.num_epochs, args.imagery_size, args.grouped_bands, args.country)
