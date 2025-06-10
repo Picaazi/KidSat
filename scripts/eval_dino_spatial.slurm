@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=eval_dino_spatial_%a
+#SBATCH --job-name=eval_dino_spatial_ET%a
 #SBATCH --partition=magma
 #SBATCH --account=math022462
 #SBATCH --nodes=1
@@ -8,8 +8,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=64G
 #SBATCH --time=12:00:00
-#SBATCH --output=logs/eval_dino_spatial_%A_%a.out
-#SBATCH --error=logs/eval_dino_spatial_%A_%a.err
+#SBATCH --output=logs/eval_dino_spatial_ET%A_%a.out
+#SBATCH --error=logs/eval_dino_spatial_ET%A_%a.err
 
 
 echo "Start time: $(date)"
@@ -27,9 +27,9 @@ python modelling/dino/evaluate.py \
     --mode spatial \
     --use_checkpoint \
     --grouped_bands 4 3 2\
-    --country ET \
-    > results/dino_spatial/evaluation.log 2>&1
+    --country TZ \
+    > results/dino_spatial/evaluation_ET.log 2>&1
 
 
 echo "Job completed at: $(date)"
-echo "DINOv2 spatial evaluation completed"
+echo "DINOv2 spatial ET evaluation completed"

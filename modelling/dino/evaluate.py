@@ -59,16 +59,38 @@ def evaluate(
             raise Exception(mode)
 
     print(
-        f"Evaluating {model_name} on fold {fold} {f'for country {country_suffix}' if country else '' }with target {target} using checkpoint {checkpoint if use_checkpoint else 'None'}"
+        f"Evaluating {model_name} on fold {fold} {f'for country {country_suffix[1:]}' if country else '' } with target {target} using checkpoint {checkpoint if use_checkpoint else 'None'}"
     )
 
+    # Modified to adjust the actual number of features/column (target size) of the country-wise model
+    if use_checkpoint and os.path.exists(checkpoint):
+        # Load checkpoint to get the actual target size
+        temp_state = torch.load(checkpoint, map_location='cpu')
+        actual_target_size = temp_state['model_state_dict']['regression_head.weight'].shape[0]
+        target_size = actual_target_size
+        print(f"Detected target size from checkpoint: {target_size}")
+        
+        # Also set eval_target appropriately
+        if target == "":
+            eval_target = "deprived_sev"  # Use this for single target evaluation
+    else:
+        # Original logic for when not using checkpoint
+        if target == "":
+            eval_target = "deprived_sev"
+            target_size = 99
+        else:
+            eval_target = target
+            target_size = 1 if model_not_named_target else 99
+
     # Determine size of target
+    '''
     if target == "":
         eval_target = "deprived_sev"
         target_size = 99
     else:
         eval_target = target
         target_size = 1 if model_not_named_target else 99
+    '''
 
     # Image Modify based on the Satellite used (L and S)
     normalization = 30000.0 if imagery_source == "L" else 3000.0

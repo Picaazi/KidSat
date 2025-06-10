@@ -49,7 +49,8 @@ def get_datasets(train_df, test_df, imagery_path, imagery_source, target =''):
     # Drop rows with NaN values in the filtered subset of columns
     train_df = train_df.dropna(subset=filtered_predict_target)
     predict_target = sorted(filtered_predict_target)
-    
+
+        
     return train_df, test_df, predict_target
     
 

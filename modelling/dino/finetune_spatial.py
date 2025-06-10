@@ -42,6 +42,19 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
 
 
     train_df, test_df, predict_target = get_datasets(train_df, test_df, imagery_path, imagery_source, target)
+
+        # In your training script, add this after get_datasets():
+    print(f"Number of target variables: {len(predict_target)}")
+    print(f"Target variables: {predict_target}")
+
+    # Compare with expected 99 variables
+    expected_targets = ['h10', 'h3', 'h31', 'h5', 'h7', 'h9', 
+                    'hc70', 'hv109', 'hv121', 'hv106', 'hv201', 
+                    'hv204', 'hv205', 'hv216', 'hv225', 'hv271', 'v312']
+
+    # Check which base variables are missing
+    missing_base = [col for col in expected_targets if not any(col in t for t in predict_target)]
+    print(f"Missing base variables: {missing_base}")
     # available_imagery = []
     # for d in os.listdir(imagery_path):
     #     if d[-2] == imagery_source:

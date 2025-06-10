@@ -31,7 +31,7 @@ python modelling/dino/finetune_spatial.py \
     --imagery_source L \
     --batch_size 8 \
     --num_epochs 20 \
-    --country ET \
+    --country TZ \
 
 echo "Job completed at: $(date)"
 echo "DINOv2 spatial training fold $SLURM_ARRAY_TASK_ID completed"
