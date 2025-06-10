@@ -30,6 +30,65 @@ import os
 # grouped_bands: which RGB bands to use for input image
 
 
+def prepare_location_features(df):
+    """
+    Prepare location features from DHS data (already processed)
+    """
+    # hv025 is already one-hot encoded as hv025_1 and hv025_2
+    location_columns = ['hv025_1', 'hv025_2']
+    
+    # Check if columns exist
+    missing_cols = [col for col in location_columns if col not in df.columns]
+    if missing_cols:
+        raise ValueError(f"Missing location columns: {missing_cols}")
+    
+    # Extract urban/rural features
+    urban_rural_features = df[location_columns].values
+    
+    print(f"Urban/Rural feature distribution:")
+    print(f"  hv025_1 (Urban): {df['hv025_1'].sum()} samples ({df['hv025_1'].mean()*100:.1f}%)")
+    print(f"  hv025_2 (Rural): {df['hv025_2'].sum()} samples ({df['hv025_2'].mean()*100:.1f}%)")
+    
+    # Optional: Add additional location features if you want to experiment
+    additional_features = []
+    
+    '''
+    # Coordinates (if you want to add them later)
+    if 'LATNUM' in df.columns and 'LONGNUM' in df.columns:
+        coords = df[['LATNUM', 'LONGNUM']].values
+        # Normalize coordinates
+        coords_normalized = (coords - coords.mean(axis=0)) / coords.std(axis=0)
+        additional_features.append(coords_normalized)
+        print(f"  Added coordinates: {coords_normalized.shape[1]} features")
+    
+    # Wealth index (already available as hv270)
+    if 'hv270' in df.columns:
+        wealth = df[['hv270']].values
+        # Normalize wealth index
+        wealth_normalized = (wealth - wealth.mean()) / wealth.std()
+        additional_features.append(wealth_normalized)
+        print(f"  Added wealth index: 1 feature")
+    
+    # Region information (hv024 - might be useful for geographic context)
+    if 'hv024' in df.columns:
+        # One-hot encode regions within country
+        region_dummies = pd.get_dummies(df['hv024'], prefix='region')
+        additional_features.append(region_dummies.values)
+        print(f"  Added region dummies: {region_dummies.shape[1]} features")
+    '''
+    
+    # Combine all location features
+    if additional_features:
+        all_features = np.concatenate([urban_rural_features] + additional_features, axis=1)
+        total_additional = sum(f.shape[1] for f in additional_features)
+        print(f"  Total location features: {all_features.shape[1]} (2 urban/rural + {total_additional} additional)")
+    else:
+        all_features = urban_rural_features
+        print(f"  Total location features: {all_features.shape[1]} (urban/rural only)")
+    
+    return all_features
+
+
 def evaluate(
     fold,
     model_name,
@@ -42,6 +101,7 @@ def evaluate(
     model_output_dim=768,
     grouped_bands=None,
     country=None,
+    use_location_features=False, # Use Geo info 
 ):
     model_par_dir = "modelling/dino/model/"
     country_suffix = f'_{country.upper()}' if country else ''
@@ -107,6 +167,7 @@ def evaluate(
         train_df = pd.read_csv(f"{data_folder}train_fold_{fold}{country_suffix}.csv")
         test_df = pd.read_csv(f"{data_folder}test_fold_{fold}{country_suffix}.csv")
 
+    
     # Filter out imagery files that match the source type (L or S)
     available_imagery = [
         os.path.join(imagery_path, d, f)
@@ -133,6 +194,22 @@ def evaluate(
     train_df = train_df[train_df["deprived_sev"].notna()]
     test_df["imagery_path"] = test_df["CENTROID_ID"].apply(filter_contains)
     test_df = test_df[test_df["deprived_sev"].notna()]
+
+    # Reset indices after all filtering is complete
+    train_df = train_df.reset_index(drop=True)
+    test_df = test_df.reset_index(drop=True)
+
+    # NOW extract location features from the final, clean dataframes
+    if use_location_features:
+        print("Preparing training location features...")
+        train_location_features = prepare_location_features(train_df)
+        
+        print("Preparing test location features...")
+        test_location_features = prepare_location_features(test_df)
+    else:
+        train_location_features = None
+        test_location_features = None
+        print("Not using location features")
 
     # Load image files and preprocess (stack bands, normalize, clip)
     def load_and_preprocess_image(path):
@@ -172,7 +249,6 @@ def evaluate(
 
     model = ViTForRegression(base_model)
 
-    # No idea how checkpoint is used, if known pls help me to add some comment
     if use_checkpoint:
         state_dict = torch.load(checkpoint)
         model.load_state_dict(state_dict["model_state_dict"])
@@ -210,60 +286,157 @@ def evaluate(
     model.eval()
 
     # Extract features from base model for training data
-    X_train, y_train = [], []
+    X_train_visual, y_train = [], []
+
     for images, targets in tqdm(train_loader):
         images, targets = images.to(device), targets.to(device)
         with torch.no_grad():
             outputs = model.base_model(images)
-        X_train.append(outputs.cpu()[0].numpy())
+        X_train_visual.append(outputs.cpu()[0].numpy())
         y_train.append(targets.cpu()[0].numpy())
 
     # Extract features from base model for test data
-    X_test, y_test = [], []
+    X_test_visual, y_test = [], []
     for images, targets in tqdm(val_loader):
         images, targets = images.to(device), targets.to(device)
         with torch.no_grad():
             outputs = model.base_model(images)
-        X_test.append(outputs.cpu()[0].numpy())
+        X_test_visual.append(outputs.cpu()[0].numpy())
         y_test.append(targets.cpu()[0].numpy())
 
-    X_train, y_train = np.array(X_train), np.array(y_train)
-    X_test, y_test = np.array(X_test), np.array(y_test)
+    X_train_visual, y_train = np.array(X_train_visual), np.array(y_train)
+    X_test_visual, y_test = np.array(X_test_visual), np.array(y_test)
+
+    # Combine visual and location features
+    if use_location_features:
+        # Since DataLoader processes samples in order and we reset indices,
+        # location features align directly with visual features
+        X_train = np.concatenate([X_train_visual, train_location_features], axis=1)
+        X_test = np.concatenate([X_test_visual, test_location_features], axis=1)
+        
+        print(f"\nCombined feature dimensions:")
+        print(f"  Visual features: {X_train_visual.shape[1]}")
+        print(f"  Location features: {train_location_features.shape[1]}")
+        print(f"  Total features: {X_train.shape[1]}")
+    else:
+        X_train = X_train_visual
+        X_test = X_test_visual
+        print(f"\nUsing visual features only: {X_train.shape[1]} dimensions")
+    
 
     # Save extracted features and targets to CSV
     results_folder = (
-        f"modelling/dino/results/split_{mode}{imagery_source}_{fold}_{grouped_bands}{country_suffix}/"
+        f"modelling/dino/results/split_{mode}{imagery_source}_{fold}_{grouped_bands}"
+        f"{'_loc' if use_location_features else ''}{country_suffix}"
     )
     if not os.path.exists(results_folder):
         os.makedirs(results_folder)
     pd.DataFrame(X_train).to_csv(results_folder + "X_train.csv", index=False)
-    pd.DataFrame(y_train, columns=["target"]).to_csv(
-        results_folder + "y_train.csv", index=False
-    )
+    pd.DataFrame(y_train, columns=["target"]).to_csv(results_folder + "y_train.csv", index=False)
     pd.DataFrame(X_test).to_csv(results_folder + "X_test.csv", index=False)
-    pd.DataFrame(y_test, columns=["target"]).to_csv(
-        results_folder + "y_test.csv", index=False
-    )
+    pd.DataFrame(y_test, columns=["target"]).to_csv(results_folder + "y_test.csv", index=False)
+
+    # Save visual features separately for comparison
+    pd.DataFrame(X_train_visual).to_csv(results_folder + "X_train_visual_only.csv", index=False)
+    pd.DataFrame(X_test_visual).to_csv(results_folder + "X_test_visual_only.csv", index=False)
+
+    # Save location features if used
+    if use_location_features:
+        pd.DataFrame(train_location_features).to_csv(results_folder + "X_train_location.csv", index=False)
+        pd.DataFrame(test_location_features).to_csv(results_folder + "X_test_location.csv", index=False)
 
     # Ridge Regression with cross-validation to evaluate features
     alphas = np.logspace(-6, 6, 20)
-    ridge_pipeline = Pipeline(
-        [("ridge", RidgeCV(alphas=alphas, cv=5, scoring="neg_mean_absolute_error"))]
-    )
+
+    # Define the pipeline once
+    ridge_pipeline = Pipeline([
+        ("ridge", RidgeCV(alphas=alphas, cv=5, scoring="neg_mean_absolute_error"))
+    ])
 
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
-    cv_scores = cross_val_score(
-        ridge_pipeline, X_train, y_train, cv=kf, scoring="neg_mean_absolute_error"
-    )
 
-    print("Cross-validation scores (negative MAE):", cv_scores)
-    print("Mean cross-validation score (negative MAE):", cv_scores.mean())
+    # COMPARATIVE ANALYSIS
+    if use_location_features:
+        print("\n=== COMPARATIVE ANALYSIS ===")
+        
+        # Visual features only
+        visual_cv_scores = cross_val_score(
+            ridge_pipeline, X_train_visual, y_train, cv=kf, scoring="neg_mean_absolute_error"
+        )
+        ridge_pipeline.fit(X_train_visual, y_train)
+        visual_only_score = np.mean(np.abs(ridge_pipeline.predict(X_test_visual) - y_test))
+        
+        print(f"Visual features only:")
+        print(f"  CV MAE: {-visual_cv_scores.mean():.4f} ± {visual_cv_scores.std():.4f}")
+        print(f"  Test MAE: {visual_only_score:.4f}")
+        
+        # Location features only (if meaningful)
+        if train_location_features.shape[1] > 0:
+            location_cv_scores = cross_val_score(
+                ridge_pipeline, train_location_features, y_train, cv=kf, scoring="neg_mean_absolute_error"
+            )
+            ridge_pipeline.fit(train_location_features, y_train)
+            location_only_score = np.mean(np.abs(ridge_pipeline.predict(test_location_features) - y_test))
+            
+            print(f"Location features only:")
+            print(f"  CV MAE: {-location_cv_scores.mean():.4f} ± {location_cv_scores.std():.4f}")
+            print(f"  Test MAE: {location_only_score:.4f}")
+        else:
+            location_only_score = None
+        
+        # Combined features
+        combined_cv_scores = cross_val_score(
+            ridge_pipeline, X_train, y_train, cv=kf, scoring="neg_mean_absolute_error"
+        )
+        ridge_pipeline.fit(X_train, y_train)
+        combined_score = np.mean(np.abs(ridge_pipeline.predict(X_test) - y_test))
+        
+        print(f"Combined features:")
+        print(f"  CV MAE: {-combined_cv_scores.mean():.4f} ± {combined_cv_scores.std():.4f}")
+        print(f"  Test MAE: {combined_score:.4f}")
+        
+        # Calculate improvement
+        improvement = visual_only_score - combined_score
+        improvement_pct = (improvement / visual_only_score) * 100
+        print(f"\nImprovement from adding location: {improvement:.4f} MAE ({improvement_pct:.1f}%)")
+        
+        # Save detailed analysis
+        analysis_results = {
+            'visual_only_cv_mae': -visual_cv_scores.mean(),
+            'visual_only_cv_std': visual_cv_scores.std(),
+            'visual_only_test_mae': visual_only_score,
+            'location_only_test_mae': location_only_score,
+            'combined_cv_mae': -combined_cv_scores.mean(),
+            'combined_cv_std': combined_cv_scores.std(),
+            'combined_test_mae': combined_score,
+            'improvement_mae': improvement,
+            'improvement_pct': improvement_pct,
+            'visual_features_count': X_train_visual.shape[1],
+            'location_features_count': train_location_features.shape[1],
+            'total_features_count': X_train.shape[1]
+        }
+        
+        pd.DataFrame([analysis_results]).to_csv(results_folder + "feature_analysis.csv", index=False)
+        
+        # Use combined results for final reporting
+        final_cv_scores = combined_cv_scores
+        final_test_score = combined_score
+    
+    else:
+        # Standard evaluation without location features
+        final_cv_scores = cross_val_score(
+            ridge_pipeline, X_train, y_train, cv=kf, scoring="neg_mean_absolute_error"
+        )
+        ridge_pipeline.fit(X_train, y_train)
+        final_test_score = np.mean(np.abs(ridge_pipeline.predict(X_test) - y_test))
 
-    ridge_pipeline.fit(X_train, y_train)
-    test_score = np.mean(np.abs(ridge_pipeline.predict(X_test) - y_test))
-    print("Test Score (negative MAE):", test_score)
+    # Final results
+    print(f"\n=== FINAL EVALUATION RESULTS ===")
+    print("Cross-validation scores (negative MAE):", final_cv_scores)
+    print("Mean cross-validation score (negative MAE):", final_cv_scores.mean())
+    print("Test Score (MAE):", final_test_score)
 
-    return test_score
+    return final_test_score
 
 
 
