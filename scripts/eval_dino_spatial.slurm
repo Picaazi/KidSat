@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=eval_dino_spatial_ET_FThv025%a
+#SBATCH --job-name=eval_dino_spatial_sh%a
 #SBATCH --partition=magma
 #SBATCH --account=math022462
 #SBATCH --nodes=1
@@ -8,8 +8,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=64G
 #SBATCH --time=4:00:00
-#SBATCH --output=logs/eval_dino_spatial_ET_FThv025%A_%a.out
-#SBATCH --error=logs/eval_dino_spatial_ET_FThv025%A_%a.err
+#SBATCH --output=logs/eval_dino_spatial_sh%A_%a.out
+#SBATCH --error=logs/eval_dino_spatial_sh%A_%a.err
 
 
 echo "Start time: $(date)"
@@ -27,10 +27,10 @@ python modelling/dino/evaluate.py \
     --mode spatial \
     --use_checkpoint \
     --grouped_bands 4 3 2 \
-    --country TZ \
-    --enhanced_targets \
-    > results/dino_spatial/evaluation_TZ_FThv025.log 2>&1
+    --use_location_features \
+    --use_spherical_harmonics \
+    > results/dino_spatial/evaluation_sh.log 2>&1
 
 
 echo "Job completed at: $(date)"
-echo "DINOv2 spatial TZ evaluation completed"
+echo "DINOv2 spatial evaluation completed"
