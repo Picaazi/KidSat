@@ -8,7 +8,7 @@ import random
 import os
 import re
 
-def get_datasets(train_df, test_df, imagery_path, imagery_source, target =''):
+def get_datasets(train_df, test_df, imagery_path, imagery_source, target ='', enhanced_targets=False):
     available_imagery = []
     for d in os.listdir(imagery_path):
         if d[-2] == imagery_source:
@@ -38,6 +38,10 @@ def get_datasets(train_df, test_df, imagery_path, imagery_source, target =''):
         predict_target = ['h10', 'h3', 'h31', 'h5', 'h7', 'h9', 
                         'hc70', 'hv109', 'hv121', 'hv106', 'hv201', 
                         'hv204', 'hv205', 'hv216', 'hv225', 'hv271', 'v312']
+
+        if enhanced_targets:
+            predict_target.append('hv025')
+
     else:
         predict_target = [target]
 

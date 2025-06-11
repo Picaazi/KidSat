@@ -52,31 +52,6 @@ def prepare_location_features(df):
     # Optional: Add additional location features if you want to experiment
     additional_features = []
     
-    '''
-    # Coordinates (if you want to add them later)
-    if 'LATNUM' in df.columns and 'LONGNUM' in df.columns:
-        coords = df[['LATNUM', 'LONGNUM']].values
-        # Normalize coordinates
-        coords_normalized = (coords - coords.mean(axis=0)) / coords.std(axis=0)
-        additional_features.append(coords_normalized)
-        print(f"  Added coordinates: {coords_normalized.shape[1]} features")
-    
-    # Wealth index (already available as hv270)
-    if 'hv270' in df.columns:
-        wealth = df[['hv270']].values
-        # Normalize wealth index
-        wealth_normalized = (wealth - wealth.mean()) / wealth.std()
-        additional_features.append(wealth_normalized)
-        print(f"  Added wealth index: 1 feature")
-    
-    # Region information (hv024 - might be useful for geographic context)
-    if 'hv024' in df.columns:
-        # One-hot encode regions within country
-        region_dummies = pd.get_dummies(df['hv024'], prefix='region')
-        additional_features.append(region_dummies.values)
-        print(f"  Added region dummies: {region_dummies.shape[1]} features")
-    '''
-    
     # Combine all location features
     if additional_features:
         all_features = np.concatenate([urban_rural_features] + additional_features, axis=1)
@@ -101,20 +76,22 @@ def evaluate(
     model_output_dim=768,
     grouped_bands=None,
     country=None,
+    enhanced_targets=False,
     use_location_features=False, # Use Geo info 
 ):
     model_par_dir = "modelling/dino/model/"
     country_suffix = f'_{country.upper()}' if country else ''
+    enhanced_suffix = f'_enhanced' if enhanced_targets else ''
 
     # Build checkpoint filename (pth file) based on mode and target
     if use_checkpoint:
         named_target = target if model_not_named_target else ""
         if mode == "temporal":
-            checkpoint = f"{model_par_dir}{model_name}_temporal_best_{imagery_source}{named_target}{country_suffix}.pth"
+            checkpoint = f"{model_par_dir}{model_name}_temporal_best_{imagery_source}{named_target}{country_suffix}{enhanced_suffix}.pth"
         elif mode == "spatial":
-            checkpoint = f"{model_par_dir}{model_name}_{fold}_{grouped_bands}all_cluster_best_{imagery_source}{named_target}{country_suffix}.pth"
+            checkpoint = f"{model_par_dir}{model_name}_{fold}_{grouped_bands}all_cluster_best_{imagery_source}{named_target}{country_suffix}{enhanced_suffix}.pth"
         elif mode == "one_country":
-            checkpoint = f"{model_par_dir}{model_name}_{fold}_one_country_best_{imagery_source}{named_target}{country_suffix}.pth"
+            checkpoint = f"{model_par_dir}{model_name}_{fold}_one_country_best_{imagery_source}{named_target}{country_suffix}{enhanced_suffix}.pth"
         else:
             raise Exception(mode)
 
@@ -137,7 +114,10 @@ def evaluate(
         # Original logic for when not using checkpoint
         if target == "":
             eval_target = "deprived_sev"
-            target_size = 99
+            if enhanced_targets:
+                target_size = 101
+            else:
+                target_size = 99
         else:
             eval_target = target
             target_size = 1 if model_not_named_target else 99
@@ -453,6 +433,8 @@ if __name__ == '__main__':
     parser.add_argument('--model_not_named_target', action='store_false', help='Whether the model name contains the target variable')
     parser.add_argument('--grouped_bands', nargs='+', type=int, help="List of grouped bands")
     parser.add_argument('--country', type=str, help='Two-letter country code for single country training (e.g., ET, KE)')
+    parser.add_argument('--use_location_features', action='store_true', help='Whether to include urban/rural and other location features')
+    parser.add_argument('--enhanced_targets', action='store_true')
 
     args = parser.parse_args()
     maes = []
@@ -461,7 +443,7 @@ if __name__ == '__main__':
     elif args.mode == 'spatial':
         for i in range(5):
             fold = i + 1
-            mae = evaluate(str(fold), args.model_name, args.target, args.use_checkpoint,args.model_not_named_target,args.imagery_path, args.imagery_source, args.mode, args.model_output_dim, grouped_bands=args.grouped_bands, country=args.country)
+            mae = evaluate(str(fold), args.model_name, args.target, args.use_checkpoint,args.model_not_named_target,args.imagery_path, args.imagery_source, args.mode, args.model_output_dim, grouped_bands=args.grouped_bands, country=args.country, enhanced_targets=args.enhanced_targets, use_location_features=args.use_location_features)
             maes.append(mae)
         print(np.mean(maes), np.std(maes)/np.sqrt(5))
     elif args.mode == 'one_country':

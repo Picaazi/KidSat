@@ -20,7 +20,7 @@ from preparation import image_config, set_seed, CustomDataset, save_checkpoint, 
 from models import ViTForRegression
 warnings.filterwarnings("ignore")
 
-def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch_size, num_epochs, img_size = None, grouped_bands = None, country = None):
+def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch_size, num_epochs, img_size = None, grouped_bands = None, country = None, enhanced_targets=False):
     
     normalization, imagery_size = image_config(imagery_source, img_size)
     
@@ -29,28 +29,30 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
         
     data_folder = r'survey_processing/processed_data'
     country_suffix = f'_{country.upper()}' if country else ''
+    enhanced_suffix = f'_enhanced' if enhanced_targets else ''
     
     train_df = pd.read_csv(f'{data_folder}/train_fold_{fold}{country_suffix}.csv')
     test_df = pd.read_csv(f'{data_folder}/test_fold_{fold}{country_suffix}.csv')
     
-    best_model = f'modelling/dino/model/{model_name}_{fold}_{str(grouped_bands)}all_cluster_best_{imagery_source}{target}{country_suffix}.pth'
-    last_model = f'modelling/dino/model/{model_name}_{fold}_{str(grouped_bands)}all_cluster_last_{imagery_source}{target}{country_suffix}.pth'
+    best_model = f'modelling/dino/model/{model_name}_{fold}_{str(grouped_bands)}all_cluster_best_{imagery_source}{target}{country_suffix}{enhanced_suffix}.pth'
+    last_model = f'modelling/dino/model/{model_name}_{fold}_{str(grouped_bands)}all_cluster_last_{imagery_source}{target}{country_suffix}{enhanced_suffix}.pth'
     
     print(f"Model files:")
     print(f"  Best: {best_model}")
     print(f"  Last: {last_model}")
 
 
-    train_df, test_df, predict_target = get_datasets(train_df, test_df, imagery_path, imagery_source, target)
+    train_df, test_df, predict_target = get_datasets(train_df, test_df, imagery_path, imagery_source, target, enhanced_targets)
 
-        # In your training script, add this after get_datasets():
+    # In your training script, add this after get_datasets():
+    print(f"Enhanced fine-tuning: {enhanced_targets}")
     print(f"Number of target variables: {len(predict_target)}")
     print(f"Target variables: {predict_target}")
 
     # Compare with expected 99 variables
     expected_targets = ['h10', 'h3', 'h31', 'h5', 'h7', 'h9', 
                     'hc70', 'hv109', 'hv121', 'hv106', 'hv201', 
-                    'hv204', 'hv205', 'hv216', 'hv225', 'hv271', 'v312']
+                    'hv204', 'hv205', 'hv216', 'hv225', 'hv271', 'v312', 'hv025']
 
     # Check which base variables are missing
     missing_base = [col for col in expected_targets if not any(col in t for t in predict_target)]
@@ -207,7 +209,7 @@ if __name__ == '__main__':
     parser.add_argument('--imagery_size', type=int, help='Size of the imagery')
     parser.add_argument('--grouped_bands', type=int, nargs=3, help='Three integer grouped bands (e.g., 4 3 2)')
     parser.add_argument('--country', type=str, help='Two-letter country code for single country training (e.g., ET, KE)')
-
+    parser.add_argument('--enhanced_targets', action='store_true', help='Include hv025 in fine-tuning targets')
     args = parser.parse_args()
 
     # Validate country code if provided
@@ -217,4 +219,5 @@ if __name__ == '__main__':
             raise ValueError("Country code must be exactly 2 letters (e.g., ET, KE)")
         
     main(args.fold, args.model_name, args.target, args.imagery_path, args.imagery_source,
-        args.emb_size, args.batch_size, args.num_epochs, args.imagery_size, args.grouped_bands, args.country)
+        args.emb_size, args.batch_size, args.num_epochs, args.imagery_size, args.grouped_bands, 
+        args.country, args.enhanced_targets)
