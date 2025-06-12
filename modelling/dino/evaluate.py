@@ -10,6 +10,9 @@ from sklearn.model_selection import KFold, cross_val_score
 from sklearn.linear_model import RidgeCV
 from sklearn.pipeline import Pipeline
 from torch.utils.data import Dataset, DataLoader
+
+import torch.optim as optim
+
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -33,7 +36,7 @@ import os
 def evaluate(fold, model_name, target="", use_checkpoint=False, model_not_named_target=True, imagery_path=None, 
             imagery_source=None, mode="temporal", model_output_dim=768, grouped_bands=None):
     
-    model_par_dir = "modelling/dino/model/"
+    model_par_dir = "modelling/dino/model/Cleaning_test/"
 
     # Build checkpoint filename (pth file) based on mode and target
     if use_checkpoint:
@@ -104,9 +107,21 @@ def evaluate(fold, model_name, target="", use_checkpoint=False, model_not_named_
     # Load image files and preprocess (stack bands, normalize, clip)
     def load_and_preprocess_image(path):
         with rasterio.open(path) as src:
-            r = src.read(grouped_bands[0])
-            g = src.read(grouped_bands[1])
-            b = src.read(grouped_bands[2])
+            
+            gb = [4,3,2]
+            if grouped_bands is None:
+                if "L7" in path or "L5" in path:
+                    gb = [3, 2, 1] 
+                elif "L8" in path or "S2" in path:
+                    gb = [4, 3, 2]
+                else:
+                    print("No satilite found, idk what band to use")
+            else:
+                gb = grouped_bands
+                
+            r = src.read(gb[0])
+            g = src.read(gb[1])
+            b = src.read(gb[2])
             img = np.dstack((r, g, b))
             img = img / normalization * 255.0
         img = np.nan_to_num(img, nan=0, posinf=255, neginf=0)
@@ -178,6 +193,7 @@ def evaluate(fold, model_name, target="", use_checkpoint=False, model_not_named_
 
     # Extract features from base model for training data
     X_train, y_train = [], []
+    print("Extracting features from training data...")
     for images, targets in tqdm(train_loader):
         images, targets = images.to(device), targets.to(device)
         with torch.no_grad():
@@ -187,6 +203,7 @@ def evaluate(fold, model_name, target="", use_checkpoint=False, model_not_named_
 
     # Extract features from base model for test data
     X_test, y_test = [], []
+    print("Extracting features from test set...")
     for images, targets in tqdm(val_loader):
         images, targets = images.to(device), targets.to(device)
         with torch.no_grad():
@@ -199,7 +216,7 @@ def evaluate(fold, model_name, target="", use_checkpoint=False, model_not_named_
 
     # Save extracted features and targets to CSV
     results_folder = (
-        f"modelling/dino/results/split_{mode}{imagery_source}_{fold}_{grouped_bands}/"
+        f"modelling/dino/results/split_new_{mode}{imagery_source}_{fold}_{grouped_bands}/"
     )
     if not os.path.exists(results_folder):
         os.makedirs(results_folder)
@@ -229,6 +246,124 @@ def evaluate(fold, model_name, target="", use_checkpoint=False, model_not_named_
     ridge_pipeline.fit(X_train, y_train)
     test_score = np.mean(np.abs(ridge_pipeline.predict(X_test) - y_test))
     print("Test Score (negative MAE):", test_score)
+    
+    
+
+
+    # # Make sure data is in float32 format for PyTorch
+    # X_train_tensor = torch.tensor(X_train, dtype=torch.float32)
+    # y_train_tensor = torch.tensor(y_train, dtype=torch.float32).view(-1, 1)
+    # X_test_tensor = torch.tensor(X_test, dtype=torch.float32)
+    # y_test_tensor = torch.tensor(y_test, dtype=torch.float32).view(-1, 1)
+
+    # # Define 5-layer Neural Network (4 hidden layers + 1 output layer)
+    # class FiveLayerNN(nn.Module):
+    #     def __init__(self, input_dim):
+    #         super(FiveLayerNN, self).__init__()
+    #         self.net = nn.Sequential(
+    #             nn.Linear(input_dim, 128),
+    #             nn.ReLU(),
+    #             nn.Linear(128, 64),
+    #             nn.ReLU(),
+    #             nn.Linear(64, 64),
+    #             nn.ReLU(),
+    #             nn.Linear(64, 32),
+    #             nn.ReLU(),
+    #             nn.Linear(32, 1),
+    #             nn.Sigmoid()  # Final activation is sigmoid
+    #         )
+        
+    #     def forward(self, x):
+    #         return self.net(x)
+
+
+    # # Hyperparameters
+    # num_epochs = 100
+    # batch_size = 64
+    # learning_rate = 0.001
+
+    # # Cross-validation setup
+    # kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    # cv_scores = []
+
+    # for fold_cv, (train_idx, val_idx) in enumerate(kf.split(X_train_tensor)):
+    #     print(f"\nStarting Fold {fold_cv+1}/{kf.get_n_splits()}")
+
+    #     X_tr, X_val = X_train_tensor[train_idx], X_train_tensor[val_idx]
+    #     y_tr, y_val = y_train_tensor[train_idx], y_train_tensor[val_idx]
+
+    #     # Define model, loss, optimizer
+    #     model_nn = FiveLayerNN(input_dim=X_train.shape[1]).to(device)
+    #     criterion = nn.L1Loss()  # MAE
+    #     optimizer = optim.Adam(model_nn.parameters(), lr=learning_rate)
+
+    #     # Dataset and DataLoader for mini-batch training
+    #     train_dataset_cv = torch.utils.data.TensorDataset(X_tr, y_tr)
+    #     train_loader_cv = torch.utils.data.DataLoader(train_dataset_cv, batch_size=batch_size, shuffle=True)
+
+    #     print(f"Training Fold {fold_cv+1}")
+    #     for epoch in tqdm(range(num_epochs), desc=f"Epochs (Fold {fold_cv+1})"):
+    #         model_nn.train()
+    #         epoch_loss = 0
+    #         for batch_X, batch_y in tqdm(train_loader_cv, desc=f"Batch Training (Fold {fold_cv+1}, Epoch {epoch+1})", leave=False):
+    #             batch_X, batch_y = batch_X.to(device), batch_y.to(device)
+    #             optimizer.zero_grad()
+    #             outputs = model_nn(batch_X)
+    #             loss = criterion(outputs, batch_y)
+    #             loss.backward()
+    #             optimizer.step()
+    #             epoch_loss += loss.item()
+
+    #         # Optionally print epoch loss
+    #         tqdm.write(f"Fold {fold_cv+1} Epoch {epoch+1} Loss: {epoch_loss/len(train_loader_cv):.4f}")
+
+    #     # Validation
+    #     model_nn.eval()
+    #     with torch.no_grad():
+    #         val_outputs = model_nn(X_val.to(device))
+    #         val_loss = criterion(val_outputs, y_val.to(device)).item()
+
+    #     print(f"Fold {fold_cv+1} MAE: {val_loss:.4f}")
+    #     cv_scores.append(-val_loss)  # negative MAE for consistency
+
+    # # Print CV results
+    # print("\nCross-validation scores (negative MAE):", cv_scores)
+    # print("Mean cross-validation score (negative MAE):", np.mean(cv_scores))
+
+    # # Final training on full training set
+    # print("\nTraining final model on full training set")
+    # model_nn_final = FiveLayerNN(input_dim=X_train.shape[1]).to(device)
+    # criterion = nn.L1Loss()
+    # optimizer = optim.Adam(model_nn_final.parameters(), lr=learning_rate)
+
+    # # Dataset and DataLoader
+    # full_train_dataset = torch.utils.data.TensorDataset(X_train_tensor, y_train_tensor)
+    # full_train_loader = torch.utils.data.DataLoader(full_train_dataset, batch_size=batch_size, shuffle=True)
+
+    # for epoch in tqdm(range(num_epochs), desc="Epochs (Final Model)"):
+    #     model_nn_final.train()
+    #     epoch_loss = 0
+    #     for batch_X, batch_y in tqdm(full_train_loader, desc=f"Batch Training (Final Model, Epoch {epoch+1})", leave=False):
+    #         batch_X, batch_y = batch_X.to(device), batch_y.to(device)
+    #         optimizer.zero_grad()
+    #         outputs = model_nn_final(batch_X)
+    #         loss = criterion(outputs, batch_y)
+    #         loss.backward()
+    #         optimizer.step()
+    #         epoch_loss += loss.item()
+
+    #     tqdm.write(f"Final Model Epoch {epoch+1} Loss: {epoch_loss/len(full_train_loader):.4f}")
+
+    # # Evaluate on test set
+    # model_nn_final.eval()
+    # with torch.no_grad():
+    #     test_outputs = model_nn_final(X_test_tensor.to(device))
+    #     test_score = criterion(test_outputs, y_test_tensor.to(device)).item()
+
+    # print("\nTest Score (MAE):", test_score)
+
+
+
 
     return test_score
 

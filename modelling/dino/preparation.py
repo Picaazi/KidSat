@@ -88,18 +88,22 @@ def load_and_preprocess_image(path, normalization, grouped_bands):
     return img
 
 def load_and_preprocess_image_all(path, normalization):
-        with rasterio.open(path) as src:
-            bands = src.read()
-            img = bands[:13]
-            img = img / normalization  # Normalize to [0, 1] (if required)
-        
-        img = np.nan_to_num(img, nan=0, posinf=1, neginf=0)
-        img = np.clip(img, 0, 1)  # Clip values to be within the 0-1 range
-        img = np.transpose(img, (1, 2, 0))
-        # Scale back to [0, 255] for visualization purposes
-        img = (img * 255).astype(np.uint8)
+    
+    new_order = [4,3,2,5,4,2]
+    
+    # input which band groups to use, then order them in the right order
+    with rasterio.open(path) as src:
+        bands = src.read()
+        img = bands[:13]
+        img = img / normalization  # Normalize to [0, 1] (if required)
+    
+    img = np.nan_to_num(img, nan=0, posinf=1, neginf=0)
+    img = np.clip(img, 0, 1)  # Clip values to be within the 0-1 range
+    img = np.transpose(img, (1, 2, 0))
+    # Scale back to [0, 255] for visualization purposes
+    img = (img * 255).astype(np.uint8)
 
-        return img
+    return img
 
 def set_seed(seed):
     torch.manual_seed(seed)
@@ -156,3 +160,4 @@ def save_checkpoint(model, optimizer, epoch, loss, filename="checkpoint.pth"):
         'optimizer_state_dict': optimizer.state_dict(),
         'loss': loss
     }, filename)
+    print(f"Checkpoint saved to {filename}, with loss: {loss:.4f} at epoch {epoch}")
