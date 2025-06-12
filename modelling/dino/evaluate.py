@@ -36,7 +36,7 @@ import os
 def evaluate(fold, model_name, target="", use_checkpoint=False, model_not_named_target=True, imagery_path=None, 
             imagery_source=None, mode="temporal", model_output_dim=768, grouped_bands=None):
     
-    model_par_dir = "modelling/dino/model/Cleaning_test/"
+    model_par_dir = "modelling/dino/model/"
 
     # Build checkpoint filename (pth file) based on mode and target
     if use_checkpoint:

@@ -89,7 +89,7 @@ def load_and_preprocess_image(path, normalization, grouped_bands):
 
 def load_and_preprocess_image_all(path, normalization):
     
-    new_order = [4,3,2,5,4,2]
+    
     
     # input which band groups to use, then order them in the right order
     with rasterio.open(path) as src:
