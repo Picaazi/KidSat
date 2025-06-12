@@ -27,13 +27,29 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
     # if grouped_bands is None:
     #     grouped_bands = [4, 3, 2]
         
-    data_folder = r'survey_processing/processed_data'
+    data_folder = r'survey_processing/processed_data/cleaning_test'
+    print(f'Loading data from {data_folder}')
+    print(f'Imagery path: {imagery_path}')
+    print(f'Imagery source: {imagery_source}')
+    print(f'Target: {target}')
+    print(f'Grouped bands: {grouped_bands}')
+    print(f'Batch size: {batch_size}')
+    print(f'Number of epochs: {num_epochs}')
+    print(f'Image size: {imagery_size}')
+    print(f'Embedding size: {emb_size}')
+    print(f'Model name: {model_name}')
     
     train_df = pd.read_csv(f'{data_folder}/train_fold_{fold}.csv')
     test_df = pd.read_csv(f'{data_folder}/test_fold_{fold}.csv')
     
-    best_model = f'modelling/dino/model/{model_name}_{fold}_{str(grouped_bands)}all_cluster_best_{imagery_source}{target}_.pth'
-    last_model = f'1modelling/dino/model/{model_name}_{fold}_{str(grouped_bands)}all_cluster_last_{imagery_source}{target}_.pth'
+    model_folder = 'modelling/dino/model/Cleaning_test'
+    if not os.path.exists(model_folder):
+        os.makedirs(model_folder)
+        
+    best_model = model_folder+ "/" + f'{model_name}_{fold}_{str(grouped_bands)}all_cluster_best_{imagery_source}{target}_.pth'
+    last_model = model_folder+ "/" + f'{model_name}_{fold}_{str(grouped_bands)}all_cluster_last_{imagery_source}{target}_.pth'
+    print(f'Best model path: {best_model}')
+    print(f'Last model path: {last_model}')
 
 
     train_df, test_df, predict_target = get_datasets(train_df, test_df, imagery_path, imagery_source, target)
