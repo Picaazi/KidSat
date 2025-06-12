@@ -28,6 +28,8 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
     
     train_df = pd.read_csv(f'{data_folder}/train_fold_{fold}.csv')
     test_df = pd.read_csv(f'{data_folder}/test_fold_{fold}.csv')
+    
+    train_df, test_df, predict_target = get_datasets(train_df, test_df, imagery_path, imagery_source, target)
 
     # Set your desired seed
     seed = 42
@@ -50,7 +52,7 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using {device}")
-    base_models = [torch.hub.load('facebookresearch/dinov2', model_name).to(device) for _ in range(4)]
+    base_models = [torch.hub.load('facebookresearch/dinov2', model_name).to(device) for _ in range(3)]
 
     def save_checkpoint(model, optimizer, epoch, loss, filename="checkpoint.pth"):
         torch.save({

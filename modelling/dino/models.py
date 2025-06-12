@@ -59,11 +59,15 @@ class ViTForRegressionWithUncertainty(nn.Module):
                 └─────────────────────────────┘
 
     '''
-        def __init__(self, base_models, grouped_bands=[[4, 3, 2], [8, 4, 2], [13, 1, 3], [12, 8, 2]], emb_size=768, predict_size=1):
+        def __init__(self, base_models, grouped_bands=None, emb_size=768, predict_size=1):
             super().__init__()
             self.base_models = nn.ModuleList(base_models)
             self.grouped_bands = torch.tensor(grouped_bands) - 1
             self.cross_attention = nn.MultiheadAttention(embed_dim=emb_size, num_heads=8)
+            
+            if grouped_bands is None:
+                grouped_bands = [[0,1,2], [3,4,5], [6,7,8]]
+                # grouped_bands = [[4, 3, 2], [8, 4, 2], [13, 1, 3], [12, 8, 2]]
             
             # Update the regression head to output both mean and uncertainty
             # The output size is doubled to handle both prediction (mean) and log variance

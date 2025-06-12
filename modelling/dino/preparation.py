@@ -87,8 +87,7 @@ def load_and_preprocess_image(path, normalization, grouped_bands):
 
     return img
 
-def load_and_preprocess_image_all(path, normalization):
-    
+def load_and_preprocess_image_all(path, normalization, gb_all):
     
     
     # input which band groups to use, then order them in the right order
@@ -96,7 +95,8 @@ def load_and_preprocess_image_all(path, normalization):
         bands = src.read()
         img = bands[:13]
         img = img / normalization  # Normalize to [0, 1] (if required)
-    
+    gb_all = [i - 1 for i in gb_all]  # Adjust for zero-based indexing
+    img = img[gb_all, :, :]  # Select the bands based on the grouped_bands list
     img = np.nan_to_num(img, nan=0, posinf=1, neginf=0)
     img = np.clip(img, 0, 1)  # Clip values to be within the 0-1 range
     img = np.transpose(img, (1, 2, 0))
@@ -131,10 +131,13 @@ class CustomDataset(Dataset):
         item = self.dataframe.iloc[idx]
         path = item['imagery_path']
         gb = [4,3,2]
+        gb_all = [4,3,2, 5,4,2,6,5,4]
         if self.grouped_bands is None:
             if "L7" in path or "L5" in path:
+                gb_all = [3,2,1,4,3,1,5,4,3]
                 gb = [3, 2, 1] 
             elif "L8" in path or "S2" in path:
+                gb_all = [4,3,2, 5,4,2,6,5,4]
                 gb = [4, 3, 2]
             else:
                 print("No satilite found, idk what band to use")
@@ -142,7 +145,7 @@ class CustomDataset(Dataset):
             gb = self.grouped_bands
             
         if self.all:
-            image = load_and_preprocess_image_all(path, self.normalization)
+            image = load_and_preprocess_image_all(path, self.normalization, gb_all)
         else:
             image = load_and_preprocess_image(path, self.normalization, gb)
         # Apply feature extractor if necessary, might need adjustments
