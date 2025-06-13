@@ -663,8 +663,10 @@ def get_health_depr(df):
     df.loc[age_filter & need_filter & (df['v312'] == 99), 'contramethodseverelydep'] = pd.NA  # Handling missing data as NaN
 
     # Moderate (+ severe) deprivation: Includes girls using traditional methods of contraception
-    df['contramethodmoderatedep'] = 0  # Initialize column
     traditional_methods = [8, 9, 10]  # Assuming these codes indicate traditional methods
+    df['contramethodmoderatedep'] = 0  # Initialize column
+    """Joshua: I would merge v312_8 v312_9 and v312_10 to v312_trad here"""
+    df['v312_trad'] = df['v312'].isin([8, 9, 10])
     df.loc[age_filter & need_filter & (df['v312'].isin([0] + traditional_methods)), 'contramethodmoderatedep'] = 1
     df.loc[age_filter & need_filter & (df['v312'] == 99), 'contramethodmoderatedep'] = pd.NA  # Handling missing data as NaN
 
@@ -1030,6 +1032,8 @@ def min_max_scale(df):
         df_processed (pd.DataFrame): Scaled DataFrame of merged DHS, poverty and geographic data.
     """
 
+
+
     # list of columns we don't want to scale
     no_scale_cols = ["CENTROID_ID", "SURVEY_NAME", "COUNTRY", "YEAR",
                     "LATNUM", "LONGNUM", "cluster"]
@@ -1110,19 +1114,31 @@ def save_split(df, save_dir):
     # # Drop rows where all these columns are zero (after scaling, they'll be in [0,1])
     # df = df[~(df[essential_cols].sum(axis=1) == 0)]
     
+    """Joshua: Here is the test on reducing the variables with very limited entries within each columns
+        aiming to reduce from 99 variables to around 70 variables
+    """
+    # Count of non-zero and non-null per column
+    non_zero_non_null = df.notnull() & (df != 0)
+    counts = non_zero_non_null.sum()
+    proportions = counts / len(df)
+
+    threshold = 0.01
+    columns_to_keep = (proportions >= threshold) | (df.columns == 'v312_trad')
+    df_cleaned = df.loc[:, columns_to_keep]
+
     # save processed dataframe
-    df.to_csv(f'{save_dir}dhs_processed.csv', index=False)
+    df_cleaned.to_csv(f'{save_dir}dhs_processed.csv', index=False)
 
     # shuffle dataframe
-    df = df.sample(frac=1, random_state=42)
+    df_cleaned = df_cleaned.sample(frac=1, random_state=42)
 
     # split and save data into 5 train/test folds
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
     fold = 1
-    for train_index, test_index in kf.split(df):
+    for train_index, test_index in kf.split(df_cleaned):
         # Generate train and test subsets
-        train_df = df.iloc[train_index]
-        test_df = df.iloc[test_index]
+        train_df = df_cleaned.iloc[train_index]
+        test_df = df_cleaned.iloc[test_index]
         
         # Save to CSV files
         train_df.to_csv(f'{save_dir}train_fold_{fold}.csv', index=False)
@@ -1131,8 +1147,8 @@ def save_split(df, save_dir):
         fold += 1
 
     # also save pre/post 2020 data
-    old_df = df[df['YEAR'] < 2020]
-    new_df = df[df['YEAR'] >= 2020]
+    old_df = df_cleaned[df_cleaned['YEAR'] < 2020]
+    new_df = df_cleaned[df_cleaned['YEAR'] >= 2020]
     new_df.to_csv(f'{save_dir}after_2020.csv', index=False)
     old_df.to_csv(f'{save_dir}before_2020.csv', index=False)
 
