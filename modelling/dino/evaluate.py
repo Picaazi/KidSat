@@ -10,6 +10,7 @@ from sklearn.model_selection import KFold, cross_val_score
 from sklearn.linear_model import RidgeCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
+from models import PovertySiren
 from torch.utils.data import Dataset, DataLoader
 import warnings
 
@@ -82,7 +83,8 @@ class SphericalHarmonicsEncoder:
         
         return harmonics_array
 
-def prepare_location_features(df, use_location_encoder=False, coord_encoding_method='spherical_harmonics'):
+def prepare_location_features(df, fold, country=None, enhanced_targets=False,
+                              use_location_encoder=False, coord_encoding_method='spherical_harmonics'):
     """
     Prepare location features from DHS data (already processed)
     """
@@ -142,36 +144,74 @@ def prepare_location_features(df, use_location_encoder=False, coord_encoding_met
                 elif coord_encoding_method == 'siren':
                     # Use the full LocationEncoder with Siren network 
                     print("Using LocationEncoder with Siren network")
-                    
-                    hparams = dict(
-                        legendre_polys=10,
-                        dim_hidden=64,
-                        num_layers=2,
-                        optimizer=dict(lr=1e-4, wd=1e-3),
-                        num_classes=64  # Output dimension for features
-                    )
-                    
-                    # Initialize the full LocationEncoder model
-                    encoder_model = LocationEncoder("sphericalharmonics", "siren", hparams)
-                    
-                    # Prepare coordinates in expected format [N, 2] where columns are [lon, lat]
-                    lonlat_tensor = torch.tensor(np.column_stack([lon, lat]), dtype=torch.float32)
-                    
-                    # Put model in eval mode for feature extraction
-                    encoder_model.eval()
-                    
-                    # Extract features
-                    with torch.no_grad():
-                        coord_features = encoder_model(lonlat_tensor)
-                    
-                    # Convert to numpy
-                    if hasattr(coord_features, 'detach'):
-                        coord_features = coord_features.detach().numpy()
-                    
-                    all_features.append(coord_features)
-                    feature_names.extend([f'coord_siren_{i}' for i in range(coord_features.shape[1])])
-                    
-                    print(f"  Added Siren coordinate features: {coord_features.shape[1]} dimensions")
+                    try:
+                        # Build Siren model path
+                        model_par_dir = "modelling/dino/model/"
+                        country_suffix = f'_{country.upper()}' if country else ''
+                        enhanced_suffix = f'_enhanced' if enhanced_targets else ''
+                        
+                        siren_model_path = f"{model_par_dir}siren_spatial_{fold}_best{country_suffix}{enhanced_suffix}.pth"
+                        
+                        print(f"Loading Siren model from: {siren_model_path}")
+                        
+                        if not os.path.exists(siren_model_path):
+                            raise FileNotFoundError(f"Siren model not found: {siren_model_path}")
+                        
+                        # Load checkpoint
+                        checkpoint = torch.load(siren_model_path, map_location='cpu')
+                        
+                        # Get model parameters
+                        representation_dim = checkpoint['representation_dim']
+                        hidden_dim = checkpoint['hidden_dim']
+                        num_layers = checkpoint['num_layers']
+                        coord_scaler = checkpoint['coord_scaler']
+                        predict_target = checkpoint['predict_target']
+                        
+                        # Reconstruct model
+                        model = PovertySiren(
+                            input_dim=2,
+                            hidden_dim=hidden_dim,
+                            num_layers=num_layers,
+                            representation_dim=representation_dim
+                        )
+                        
+                        # Modify prediction head to match training
+                        model.prediction_head = nn.Sequential(
+                            nn.Linear(representation_dim, 128),
+                            nn.ReLU(),
+                            nn.Dropout(0.1),
+                            nn.Linear(128, 64),
+                            nn.ReLU(),
+                            nn.Dropout(0.1),
+                            nn.Linear(64, len(predict_target)),
+                            nn.Sigmoid()
+                        )
+                        
+                        # Load trained weights
+                        model.load_state_dict(checkpoint['model_state_dict'])
+                        model.eval()
+                        
+                        # Extract coordinates and scale them
+                        coordinates = np.column_stack([lat, lon])
+                        coords_scaled = coord_scaler.transform(coordinates)
+                        coords_tensor = torch.FloatTensor(coords_scaled)
+                        
+                        # Extract learned representations (not predictions)
+                        with torch.no_grad():
+                            coord_features = model.encode_coordinates(coords_tensor)
+                        
+                        # Convert to numpy
+                        coord_features = coord_features.numpy()
+                        
+                        all_features.append(coord_features)
+                        feature_names.extend([f'siren_poverty_{i}' for i in range(coord_features.shape[1])])
+                        
+                        print(f"  Added fine-tuned Siren coordinate features: {coord_features.shape[1]} dimensions")
+                        
+                    except Exception as e:
+                        print(f"Fine-tuned Siren failed: {e}")
+                        print("Falling back to spherical harmonics")
+                        use_location_encoder = False  # Fall back
                 
                 else:
                     raise ValueError(f"Unknown encoding method: {coord_encoding_method}")
@@ -329,10 +369,12 @@ def evaluate(
     # Prepare location features
     if use_location_features:
         print("Preparing training location features...")
-        train_location_features, feature_names = prepare_location_features(train_df, use_location_encoder, coord_encoding_method)
+        train_location_features, feature_names = prepare_location_features(train_df, fold, country, enhanced_targets,
+            use_location_encoder, coord_encoding_method)
         
         print("Preparing test location features...")
-        test_location_features, feature_names = prepare_location_features(test_df, use_location_encoder, coord_encoding_method)
+        test_location_features, _ = prepare_location_features(test_df, fold, country, enhanced_targets,
+            use_location_encoder, coord_encoding_method)
     else:
         train_location_features = None
         test_location_features = None
@@ -405,8 +447,6 @@ def evaluate(
     train_dataset = CustomDataset(train_df, transform)
     val_dataset = CustomDataset(test_df, transform)
 
-    # I believe there is a certain format for the class CustomDataset in order to run
-    # the function DataLoader
     train_loader = DataLoader(train_dataset, batch_size=1, shuffle=False, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=4)
 

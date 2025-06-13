@@ -44,7 +44,7 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
 
     train_df, test_df, predict_target = get_datasets(train_df, test_df, imagery_path, imagery_source, target, enhanced_targets)
 
-    # In your training script, add this after get_datasets():
+
     print(f"Enhanced fine-tuning: {enhanced_targets}")
     print(f"Number of target variables: {len(predict_target)}")
     print(f"Target variables: {predict_target}")
