@@ -23,8 +23,10 @@ mkdir -p /user/work/$USER/KidSat/model_checkpoints/dino_spatial
 
 cd /user/work/$USER/KidSat
 
+source setup.sh
+
 # TRAINING: Fine-tune DINOv2 for spatial prediction
-python modelling/dino/finetune_spatial_uncer.py \
+python modelling/dino/finetune_spatial_dinoms_uncer.py \
     --fold $SLURM_ARRAY_TASK_ID \
     --model_name dinov2_vitb14 \
     --imagery_path data/imagery \

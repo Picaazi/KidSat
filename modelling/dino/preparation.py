@@ -146,13 +146,19 @@ class CustomDataset(Dataset):
             
         if self.all:
             image = load_and_preprocess_image_all(path, self.normalization, gb_all)
+            
+            # Apply feature extractor if necessary, might need adjustments
+            image_tensor = self.transform(image)
+            
+            # Assuming your target is a single scalar
+            target = torch.tensor(item[self.predict_target], dtype=torch.float32)
         else:
             image = load_and_preprocess_image(path, self.normalization, gb)
-        # Apply feature extractor if necessary, might need adjustments
-        image_tensor = self.transform(Image.fromarray(image))
+            # Apply feature extractor if necessary, might need adjustments
+            image_tensor = self.transform(Image.fromarray(image))
         
-        # Assuming your target is a single scalar                                                                                                                                                                                                                                                                                                                                                                                                      
-        target = torch.tensor(item[self.predict_target], dtype=torch.float32)
+            # Assuming your target is a single scalar                                                                                                                                                                                                                                                                                                                                                                                                      
+            target = torch.tensor(item[self.predict_target], dtype=torch.float32)
         return image_tensor, target  # Adjust based on actual output of feature_extractor
 
 # Function to save model checkpoints
