@@ -12,13 +12,13 @@
 
 
 # Set up environment
-export PYTHONPATH="/user/work/jq22530/kidsat_test/KidSat:$PYTHONPATH"
+export PYTHONPATH="/user/work/cy23765/kidsat_test/KidSat:$PYTHONPATH"
 
 # Create logs directory if it doesn't exist
 mkdir -p logs
 
 # Navigate to your project directory
-cd /user/work/jq22530/kidsat_test/KidSat
+cd /user/work/cy23765/kidsat_test/KidSat
 
 
 # Run the evaluation script

@@ -14,13 +14,13 @@
 echo "Start time: $(date)"
 
 # Set up environment
-export PYTHONPATH="/user/work/jq22530/kidsat_test/KidSat:$PYTHONPATH"
+export PYTHONPATH="/user/work/cy23765/kidsat_test/KidSat:$PYTHONPATH"
 
 
 # Create directories
-mkdir -p /user/work/jq22530/kidsat_test/KidSat/results/swin_spatial
+mkdir -p /user/work/cy23765/kidsat_test/KidSat/results/swin_spatial
 
-cd /user/work/jq22530/kidsat_test/KidSat
+cd /user/work/cy23765/kidsat_test/KidSat
 
 # Evaluating swin spatial
 python -m modelling.dino.evaluate_swin\

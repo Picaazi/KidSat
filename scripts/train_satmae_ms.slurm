@@ -13,12 +13,12 @@
 #SBATCH --error=logs/train_satmae_ms_%A_%a.err
 
 
-export PYTHONPATH="/user/work/jq22530/kidsat_test/KidSat:$PYTHONPATH"
+export PYTHONPATH="/user/work/cy23765/kidsat_test/KidSat:$PYTHONPATH"
 #export CUDA_VISIBLE_DEVICES=0
 
-mkdir -p /user/work/jq22530/kidsat_test/KidSat/logs
+mkdir -p /user/work/cy23765/kidsat_test/KidSat/logs
 
-cd /user/work/jq22530/kidsat_test/KidSat
+cd /user/work/cy23765/kidsat_test/KidSat
 
 # First download SatMAE checkpoints (you need to do this once)
 # Download from the links mentioned in the repository

@@ -13,11 +13,11 @@
 
 
 echo "Start time: $(date)"
-export PYTHONPATH="/user/work/jq22530/kidsat_test/KidSat:$PYTHONPATH"
+export PYTHONPATH="/user/work/cy23765/kidsat_test/KidSat:$PYTHONPATH"
 
-mkdir -p /user/work/jq22530/kidsat_test/KidSat/results/satmae_ms_spatial
+mkdir -p /user/work/cy23765/kidsat_test/KidSat/results/satmae_ms_spatial
 
-cd /user/work/jq22530/kidsat_test/KidSat
+cd /user/work/cy23765/kidsat_test/KidSat
 
 # EVALUATION: Test the fine-tuned satmae model
 python -m modelling.satmae.satmae_ms_eval \
