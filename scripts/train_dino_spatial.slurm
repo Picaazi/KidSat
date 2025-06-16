@@ -21,7 +21,7 @@ export PYTHONPATH="/user/work/jq22530/KidSat:$PYTHONPATH"
 mkdir -p /user/work/jq22530/KidSat/logs
 mkdir -p /user/work/jq22530/KidSat/model_checkpoints/dino_spatial
 
-cd /user/home/jq22530/KidSat
+cd /user/work/jq22530/KidSat
 
 # TRAINING: Fine-tune DINOv2 for spatial prediction
 python modelling/dino/finetune_spatial.py \
@@ -32,6 +32,7 @@ python modelling/dino/finetune_spatial.py \
     --batch_size 8 \
     --num_epochs 20 \
     --country RW \
+    --enhanced_targets
 
 echo "Job completed at: $(date)"
 echo "DINOv2 spatial training fold $SLURM_ARRAY_TASK_ID completed"

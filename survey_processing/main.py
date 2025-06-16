@@ -51,7 +51,7 @@ with open(cc_file, 'r') as file:
     dhs_cc = json.load(file)
 
 
-def process_dhs(dhs_data_dir):
+def process_dhs(dhs_data_dir, target_country=None):
     """
     Creates DHS DataFrames and Poverty DataFrames containing poverty deprivation indicators.
     Aggregates these DataFrames to the cluster level and joins these DataFrames with the GPS data.
@@ -70,12 +70,12 @@ def process_dhs(dhs_data_dir):
         raise FileNotFoundError('DHS data incomplete')
 
     # create DataFrames storing dhs data, and if possible create DataFrames with poverty deprivation indicators
-    dhs_dfs, pov_dfs = get_dhs_and_pov_dfs(dhs_data_dir)
+    dhs_dfs, pov_dfs = get_dhs_and_pov_dfs(dhs_data_dir, target_country)
                 
     # aggregate to the cluster level
     dhs_df_all = agg_dhs_dfs(dhs_dfs)
     pov_df_all = agg_pov_dfs(pov_dfs)
-    centroid_df = get_geo_data(dhs_data_dir)
+    centroid_df = get_geo_data(dhs_data_dir, target_country)
     
     """Joshua: we have to replace some of the project from centroid to correct year in dhs_df_all"""
     centroid_df["CENTROID_ID"] = centroid_df["CENTROID_ID"].str.replace(r"^ET2010", "ET2011", regex=True)
@@ -101,10 +101,10 @@ def process_dhs(dhs_data_dir):
     df_processed[matching_columns] = df_processed[matching_columns].fillna(0)
     
     # save dataframe and train/test splits
-    save_split(df_processed, save_processed_dir)
+    save_split(df_processed, save_processed_dir, target_country)
 
 
-def get_dhs_and_pov_dfs(dhs_data_dir):
+def get_dhs_and_pov_dfs(dhs_data_dir, target_country=None):
     """
     Iterate through the DHS data.
     For each survey for a certain country and year, generate a DataFrame of DHS data.
@@ -124,6 +124,10 @@ def get_dhs_and_pov_dfs(dhs_data_dir):
     print('Creating DHS and Poverty DataFrames...')
     for f in tqdm(os.listdir(dhs_data_dir)):
         if 'DHS' in f:
+            # Filter by country if specified
+            if target_country and not f.startswith(target_country):
+                continue
+
             dhs_df, create_pov_df_flag = create_dhs_dataframe(dhs_data_dir + f + '/')
             dhs_dfs.append(dhs_df)
             if create_pov_df_flag:
@@ -976,7 +980,7 @@ def agg_pov_dfs(pov_dfs):
     return pov_df_all
 
 
-def get_geo_data(dhs_data_dir):
+def get_geo_data(dhs_data_dir, target_country=None):
     """
     Iterate through the DHS data folder and extract the geographic data for each survey.
 
@@ -991,6 +995,10 @@ def get_geo_data(dhs_data_dir):
     # iterate through all DHS surveys
     for f in os.listdir(dhs_data_dir):
         if 'DHS' in f:
+            # Filter by country if specified
+            if target_country and not f.startswith(target_country):
+                continue
+
             # iterate through all sub files to find GPS data
             for sub_f in os.listdir(os.path.join(dhs_data_dir,f)):
                 if sub_f.__contains__('GE'):
@@ -1071,7 +1079,7 @@ def min_max_scale(df):
     return df_processed
 
 
-def save_split(df, save_dir):
+def save_split(df, save_dir, target_country=None):
     """
     Given the fully processed merged DHS, poverty and geographic DataFrame,
     We first save this in the save directory,
@@ -1126,8 +1134,11 @@ def save_split(df, save_dir):
     columns_to_keep = (proportions >= threshold) | (df.columns == 'v312_trad')
     df_cleaned = df.loc[:, columns_to_keep]
 
+    # Create country suffix
+    country_suffix = f'_{target_country}' if target_country else ''
+
     # save processed dataframe
-    df_cleaned.to_csv(f'{save_dir}dhs_processed.csv', index=False)
+    df.to_csv(f'{save_dir}dhs_processed{country_suffix}.csv', index=False)
 
     # shuffle dataframe
     df_cleaned = df_cleaned.sample(frac=1, random_state=42)
@@ -1141,8 +1152,8 @@ def save_split(df, save_dir):
         test_df = df_cleaned.iloc[test_index]
         
         # Save to CSV files
-        train_df.to_csv(f'{save_dir}train_fold_{fold}.csv', index=False)
-        test_df.to_csv(f'{save_dir}test_fold_{fold}.csv', index=False)
+        train_df.to_csv(f'{save_dir}train_fold_{fold}{country_suffix}.csv', index=False)
+        test_df.to_csv(f'{save_dir}test_fold_{fold}{country_suffix}.csv', index=False)
         
         fold += 1
 
@@ -1172,17 +1183,21 @@ def check_file_integrity(parent_dir, all_files, country_code):
             break
     return complete
     
+
 def main():
     # Setup argument parser
     parser = argparse.ArgumentParser(description="Process DHS data to a single CSV file.")
     parser.add_argument("dhs_data_dir", help="The parent directory enclosing all DHS folders")
+    parser.add_argument("--country", help="Two-letter country code (e.g., ET, KE)")
     args = parser.parse_args()
 
     if args.dhs_data_dir[-1] != '/':
         args.dhs_data_dir += r'/'
 
+    target_country = args.country.upper() if args.country else None
+
     # call the download function with the parsed arguments
-    process_dhs(args.dhs_data_dir)
+    process_dhs(args.dhs_data_dir, target_country)
 
 
 if __name__ == "__main__":

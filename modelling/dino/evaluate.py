@@ -9,6 +9,7 @@ from PIL import Image
 from sklearn.model_selection import KFold, cross_val_score
 from sklearn.linear_model import RidgeCV
 from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 from torch.utils.data import Dataset, DataLoader
 import warnings
 
@@ -16,6 +17,17 @@ warnings.filterwarnings("ignore")
 import pandas as pd
 from tqdm import tqdm
 import os
+
+# Try to import LocationEncoder 
+try:
+    from locationencoder import LocationEncoder
+    from locationencoder.pe import SphericalHarmonics
+    LOCATION_ENCODER_AVAILABLE = True
+    print("LocationEncoder available - using research-validated implementation")
+except ImportError:
+    LOCATION_ENCODER_AVAILABLE = False
+    print("LocationEncoder not available - using fallback implementation")
+    from scipy.special import sph_harm
 
 # Function to evaluate the model performance on given data
 # fold: Fold number or country name
@@ -30,6 +42,169 @@ import os
 # grouped_bands: which RGB bands to use for input image
 
 
+class SphericalHarmonicsEncoder:
+    def __init__(self, L=20, output_dim=256):
+        self.L = L
+        self.output_dim = output_dim
+    
+    def encode_coordinates(self, lat, lon):
+        """
+        Encode lat/lon using spherical harmonics
+        """
+        # Handle single values or arrays
+        lat = np.atleast_1d(lat)
+        lon = np.atleast_1d(lon)
+        
+        lat_rad = np.radians(lat)
+        lon_rad = np.radians(lon)
+        
+        harmonics_features = []
+        
+        for i in range(len(lat)):
+            features_i = []
+            for l in range(min(self.L + 1, 25)):  # Limit to prevent overflow
+                for m in range(-l, l + 1):
+                    try:
+                        Y_lm = sph_harm(m, l, lon_rad[i], lat_rad[i])
+                        features_i.extend([Y_lm.real, Y_lm.imag])
+                    except:
+                        features_i.extend([0.0, 0.0])  # Fallback for numerical issues
+            harmonics_features.append(features_i)
+        
+        harmonics_array = np.array(harmonics_features)
+        
+        # Pad or truncate to desired dimension
+        if harmonics_array.shape[1] > self.output_dim:
+            harmonics_array = harmonics_array[:, :self.output_dim]
+        elif harmonics_array.shape[1] < self.output_dim:
+            padding = np.zeros((harmonics_array.shape[0], self.output_dim - harmonics_array.shape[1]))
+            harmonics_array = np.concatenate([harmonics_array, padding], axis=1)
+        
+        return harmonics_array
+
+def prepare_location_features(df, use_location_encoder=False, coord_encoding_method='spherical_harmonics'):
+    """
+    Prepare location features from DHS data (already processed)
+    """
+    all_features = []
+    feature_names = []
+
+    print(f"Preparing location features with LocationEncoder: {use_location_encoder}")
+    
+    '''
+    # hv025 is already one-hot encoded as hv025_1 and hv025_2
+    location_columns = ['hv025_1', 'hv025_2']
+    
+    # Check if columns exist
+    missing_cols = [col for col in location_columns if col not in df.columns]
+    if missing_cols:
+        raise ValueError(f"Missing location columns: {missing_cols}")
+    
+    # Extract urban/rural features
+    urban_rural_features = df[location_columns].values
+    all_features.append(urban_rural_features)
+    feature_names.extend(['urban_rural_0', 'urban_rural_1'])
+    
+    print(f"Urban/Rural feature distribution:")
+    print(f"  hv025_1 (Urban): {df['hv025_1'].sum()} samples ({df['hv025_1'].mean()*100:.1f}%)")
+    print(f"  hv025_2 (Rural): {df['hv025_2'].sum()} samples ({df['hv025_2'].mean()*100:.1f}%)")
+    '''
+
+    if use_location_encoder and 'LATNUM' in df.columns and 'LONGNUM' in df.columns:
+        lat = df['LATNUM'].values
+        lon = df['LONGNUM'].values
+        
+        if LOCATION_ENCODER_AVAILABLE:
+            print(f"Using LocationEncoder with method: {coord_encoding_method}")
+            
+            try:
+                if coord_encoding_method == 'spherical_harmonics':
+                    # Use the direct SphericalHarmonics positional encoder (no trainable weights)
+                    print("Using SphericalHarmonics positional encoder")
+                    sh_encoder = SphericalHarmonics(legendre_polys=20)
+                    
+                    # Prepare coordinates in expected format [N, 2] where columns are [lon, lat] 
+                    lonlat_tensor = torch.tensor(np.column_stack([lon, lat]), dtype=torch.float32)
+                    
+                    # Encode coordinates
+                    with torch.no_grad():
+                        coord_features = sh_encoder(lonlat_tensor)
+                    
+                    # Convert to numpy
+                    if hasattr(coord_features, 'detach'):
+                        coord_features = coord_features.detach().numpy()
+                    
+                    all_features.append(coord_features)
+                    feature_names.extend([f'coord_sh_{i}' for i in range(coord_features.shape[1])])
+                    
+                    print(f"  Added spherical harmonics coordinate features: {coord_features.shape[1]} dimensions")
+                
+                elif coord_encoding_method == 'siren':
+                    # Use the full LocationEncoder with Siren network 
+                    print("Using LocationEncoder with Siren network")
+                    
+                    hparams = dict(
+                        legendre_polys=10,
+                        dim_hidden=64,
+                        num_layers=2,
+                        optimizer=dict(lr=1e-4, wd=1e-3),
+                        num_classes=64  # Output dimension for features
+                    )
+                    
+                    # Initialize the full LocationEncoder model
+                    encoder_model = LocationEncoder("sphericalharmonics", "siren", hparams)
+                    
+                    # Prepare coordinates in expected format [N, 2] where columns are [lon, lat]
+                    lonlat_tensor = torch.tensor(np.column_stack([lon, lat]), dtype=torch.float32)
+                    
+                    # Put model in eval mode for feature extraction
+                    encoder_model.eval()
+                    
+                    # Extract features
+                    with torch.no_grad():
+                        coord_features = encoder_model(lonlat_tensor)
+                    
+                    # Convert to numpy
+                    if hasattr(coord_features, 'detach'):
+                        coord_features = coord_features.detach().numpy()
+                    
+                    all_features.append(coord_features)
+                    feature_names.extend([f'coord_siren_{i}' for i in range(coord_features.shape[1])])
+                    
+                    print(f"  Added Siren coordinate features: {coord_features.shape[1]} dimensions")
+                
+                else:
+                    raise ValueError(f"Unknown encoding method: {coord_encoding_method}")
+                
+            except Exception as e:
+                print(f"LocationEncoder failed: {e}")
+                print("Falling back to simple spherical harmonics")
+                use_location_encoder = False
+        
+        if not use_location_encoder or not LOCATION_ENCODER_AVAILABLE:
+            print("Using fallback spherical harmonics implementation")
+            coord_encoder = SphericalHarmonicsEncoder(L=15, output_dim=128)
+            coord_features = coord_encoder.encode_coordinates(lat, lon)
+            all_features.append(coord_features)
+            feature_names.extend([f'coord_sh_{i}' for i in range(coord_features.shape[1])])
+
+        '''
+        geographic_features = np.column_stack([
+            np.abs(lat),  # Distance to equator
+            np.abs(lon),  # Distance to prime meridian
+            (np.abs(lat) < 23.5).astype(int),  # Tropical zone indicator
+        ])
+        all_features.append(geographic_features)
+        feature_names.extend(['dist_equator', 'dist_prime_meridian', 'tropical_zone'])
+        
+        print(f"  Added basic geographic features: {geographic_features.shape[1]} features")
+        '''
+
+    # Combine all features
+    combined_features = np.concatenate(all_features, axis=1)
+    
+    return combined_features, feature_names
+
 def evaluate(
     fold,
     model_name,
@@ -41,32 +216,68 @@ def evaluate(
     mode="temporal",
     model_output_dim=768,
     grouped_bands=None,
+    country=None,
+    enhanced_targets=False,
+    use_location_features=False, # Use Geo info 
+    use_location_encoder=False,
+    coord_encoding_method='spherical_harmonics'
 ):
     model_par_dir = "modelling/dino/model/"
+    country_suffix = f'_{country.upper()}' if country else ''
+    enhanced_suffix = f'_enhanced' if enhanced_targets else ''
 
     # Build checkpoint filename (pth file) based on mode and target
     if use_checkpoint:
         named_target = target if model_not_named_target else ""
         if mode == "temporal":
-            checkpoint = f"{model_par_dir}{model_name}_temporal_best_{imagery_source}{named_target}_.pth"
+            checkpoint = f"{model_par_dir}{model_name}_temporal_best_{imagery_source}{named_target}{country_suffix}{enhanced_suffix}.pth"
         elif mode == "spatial":
-            checkpoint = f"{model_par_dir}{model_name}_{fold}_{grouped_bands}all_cluster_best_{imagery_source}{named_target}_.pth"
+            checkpoint = f"{model_par_dir}{model_name}_{fold}_{grouped_bands}all_cluster_best_{imagery_source}{named_target}{country_suffix}{enhanced_suffix}.pth"
         elif mode == "one_country":
-            checkpoint = f"{model_par_dir}{model_name}_{fold}_one_country_best_{imagery_source}{named_target}_.pth"
+            checkpoint = f"{model_par_dir}{model_name}_{fold}_one_country_best_{imagery_source}{named_target}{country_suffix}{enhanced_suffix}.pth"
         else:
             raise Exception(mode)
 
-    print(
-        f"Evaluating {model_name} on fold {fold} with target {target} using checkpoint {checkpoint if use_checkpoint else 'None'}"
-    )
+    print(f"=== KIDSAT EVALUATION ===")
+    print(f"Fold: {fold}, Country: {country if country else 'All'}")
+    print(f"Enhanced targets for fine-tuning: {enhanced_targets}")
+    print(f"Location features: {use_location_features}")
+    print(f"LocationEncoder: {use_location_encoder} ({coord_encoding_method})")
+    print(f"Checkpoint: {checkpoint if use_checkpoint else 'None'}")
+
+
+    # Modified to adjust the actual number of features/column (target size) of the country-wise model
+    if use_checkpoint and os.path.exists(checkpoint):
+        # Load checkpoint to get the actual target size
+        temp_state = torch.load(checkpoint, map_location='cpu')
+        actual_target_size = temp_state['model_state_dict']['regression_head.weight'].shape[0]
+        target_size = actual_target_size
+        print(f"Detected target size from checkpoint: {target_size}")
+        
+        # Also set eval_target appropriately
+        if target == "":
+            eval_target = "deprived_sev"  # Use this for single target evaluation
+    else:
+        # Original logic for when not using checkpoint
+        if target == "":
+            eval_target = "deprived_sev"
+            if enhanced_targets:
+                target_size = 101
+            else:
+                target_size = 99
+        else:
+            eval_target = target
+            target_size = 1 if model_not_named_target else 99
 
     # Determine size of target
+    '''
     if target == "":
         eval_target = "deprived_sev"
         target_size = 99
     else:
         eval_target = target
         target_size = 1 if model_not_named_target else 99
+    '''
 
     # Image Modify based on the Satellite used (L and S)
     normalization = 30000.0 if imagery_source == "L" else 3000.0
@@ -80,9 +291,10 @@ def evaluate(
         train_df = pd.read_csv(f"{data_folder}before_2020.csv")
         test_df = pd.read_csv(f"{data_folder}after_2020.csv")
     else:
-        train_df = pd.read_csv(f"{data_folder}train_fold_{fold}.csv")
-        test_df = pd.read_csv(f"{data_folder}test_fold_{fold}.csv")
+        train_df = pd.read_csv(f"{data_folder}train_fold_{fold}{country_suffix}.csv")
+        test_df = pd.read_csv(f"{data_folder}test_fold_{fold}{country_suffix}.csv")
 
+    
     # Filter out imagery files that match the source type (L or S)
     available_imagery = [
         os.path.join(imagery_path, d, f)
@@ -109,6 +321,23 @@ def evaluate(
     train_df = train_df[train_df["deprived_sev"].notna()]
     test_df["imagery_path"] = test_df["CENTROID_ID"].apply(filter_contains)
     test_df = test_df[test_df["deprived_sev"].notna()]
+
+    # Reset indices after all filtering is complete
+    train_df = train_df.reset_index(drop=True)
+    test_df = test_df.reset_index(drop=True)
+
+    # Prepare location features
+    if use_location_features:
+        print("Preparing training location features...")
+        train_location_features, feature_names = prepare_location_features(train_df, use_location_encoder, coord_encoding_method)
+        
+        print("Preparing test location features...")
+        test_location_features, feature_names = prepare_location_features(test_df, use_location_encoder, coord_encoding_method)
+    else:
+        train_location_features = None
+        test_location_features = None
+        feature_names = []
+        print("Not using location features")
 
     # Load image files and preprocess (stack bands, normalize, clip)
     def load_and_preprocess_image(path):
@@ -148,7 +377,6 @@ def evaluate(
 
     model = ViTForRegression(base_model)
 
-    # No idea how checkpoint is used, if known pls help me to add some comment
     if use_checkpoint:
         state_dict = torch.load(checkpoint)
         model.load_state_dict(state_dict["model_state_dict"])
@@ -186,60 +414,166 @@ def evaluate(
     model.eval()
 
     # Extract features from base model for training data
-    X_train, y_train = [], []
+    X_train_visual, y_train = [], []
+
     for images, targets in tqdm(train_loader):
         images, targets = images.to(device), targets.to(device)
         with torch.no_grad():
             outputs = model.base_model(images)
-        X_train.append(outputs.cpu()[0].numpy())
+        X_train_visual.append(outputs.cpu()[0].numpy())
         y_train.append(targets.cpu()[0].numpy())
 
     # Extract features from base model for test data
-    X_test, y_test = [], []
+    X_test_visual, y_test = [], []
     for images, targets in tqdm(val_loader):
         images, targets = images.to(device), targets.to(device)
         with torch.no_grad():
             outputs = model.base_model(images)
-        X_test.append(outputs.cpu()[0].numpy())
+        X_test_visual.append(outputs.cpu()[0].numpy())
         y_test.append(targets.cpu()[0].numpy())
 
-    X_train, y_train = np.array(X_train), np.array(y_train)
-    X_test, y_test = np.array(X_test), np.array(y_test)
+    X_train_visual, y_train = np.array(X_train_visual), np.array(y_train)
+    X_test_visual, y_test = np.array(X_test_visual), np.array(y_test)
+
+    # Combine visual and location features
+    if use_location_features:
+        # Since DataLoader processes samples in order and we reset indices,
+        # location features align directly with visual features
+        X_train = np.concatenate([X_train_visual, train_location_features], axis=1)
+        X_test = np.concatenate([X_test_visual, test_location_features], axis=1)
+        
+        print(f"\nCombined feature dimensions:")
+        print(f"  Visual features: {X_train_visual.shape[1]}")
+        print(f"  Location features: {train_location_features.shape[1]}")
+        print(f"  Total features: {X_train.shape[1]}")
+    else:
+        X_train = X_train_visual
+        X_test = X_test_visual
+        print(f"\nUsing visual features only: {X_train.shape[1]} dimensions")
+    
 
     # Save extracted features and targets to CSV
     results_folder = (
-        f"modelling/dino/results/split_{mode}{imagery_source}_{fold}_{grouped_bands}/"
+        f"modelling/dino/results/split_{mode}{imagery_source}_{fold}_{grouped_bands}"
+        f"{'_loc' if use_location_features else ''}"
+        f"{'_locenc' if use_location_encoder else ''}"
+        f"{'_enh' if enhanced_targets else ''}"
+        f"{country_suffix}/"
+
     )
     if not os.path.exists(results_folder):
         os.makedirs(results_folder)
-    pd.DataFrame(X_train).to_csv(results_folder + "X_train.csv", index=False)
-    pd.DataFrame(y_train, columns=["target"]).to_csv(
-        results_folder + "y_train.csv", index=False
-    )
-    pd.DataFrame(X_test).to_csv(results_folder + "X_test.csv", index=False)
-    pd.DataFrame(y_test, columns=["target"]).to_csv(
-        results_folder + "y_test.csv", index=False
-    )
+
+    # Save all feature sets
+    pd.DataFrame(X_train).to_csv(f"{results_folder}X_train_combined.csv", index=False)
+    pd.DataFrame(X_test).to_csv(f"{results_folder}X_test_combined.csv", index=False)
+    pd.DataFrame(X_train_visual).to_csv(f"{results_folder}X_train_visual.csv", index=False)
+    pd.DataFrame(X_test_visual).to_csv(f"{results_folder}X_test_visual.csv", index=False)
+    pd.DataFrame(y_train, columns=["target"]).to_csv(f"{results_folder}y_train.csv", index=False)
+    pd.DataFrame(y_test, columns=["target"]).to_csv(f"{results_folder}y_test.csv", index=False)
+    
+    if use_location_features:
+        pd.DataFrame(train_location_features).to_csv(f"{results_folder}X_train_location.csv", index=False)
+        pd.DataFrame(test_location_features).to_csv(f"{results_folder}X_test_location.csv", index=False)
+        pd.DataFrame(feature_names, columns=['feature_name']).to_csv(f"{results_folder}feature_names.csv", index=False)
 
     # Ridge Regression with cross-validation to evaluate features
     alphas = np.logspace(-6, 6, 20)
-    ridge_pipeline = Pipeline(
-        [("ridge", RidgeCV(alphas=alphas, cv=5, scoring="neg_mean_absolute_error"))]
-    )
+
+    # Define the pipeline once
+    ridge_pipeline = Pipeline([
+        ('scaler', StandardScaler()),
+        ("ridge", RidgeCV(alphas=alphas, cv=5, scoring="neg_mean_absolute_error"))
+    ])
 
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
-    cv_scores = cross_val_score(
-        ridge_pipeline, X_train, y_train, cv=kf, scoring="neg_mean_absolute_error"
-    )
 
-    print("Cross-validation scores (negative MAE):", cv_scores)
-    print("Mean cross-validation score (negative MAE):", cv_scores.mean())
+    # COMPARATIVE ANALYSIS
+    if use_location_features:
+        print("\n=== COMPARATIVE ANALYSIS ===")
+        
+        # Visual features only
+        print("1. Visual features only:")
+        visual_cv_scores = cross_val_score(
+            ridge_pipeline, X_train_visual, y_train, cv=kf, scoring="neg_mean_absolute_error"
+        )
+        ridge_pipeline.fit(X_train_visual, y_train)
+        visual_only_score = np.mean(np.abs(ridge_pipeline.predict(X_test_visual) - y_test))
+        
+        print(f"  CV MAE: {-visual_cv_scores.mean():.4f} ± {visual_cv_scores.std():.4f}")
+        print(f"  Test MAE: {visual_only_score:.4f}")
+        
+        # Location features only (if meaningful)
+        if train_location_features.shape[1] > 0:
+            print('2. Location features only:')
+            location_cv_scores = cross_val_score(
+                ridge_pipeline, train_location_features, y_train, cv=kf, scoring="neg_mean_absolute_error"
+            )
+            ridge_pipeline.fit(train_location_features, y_train)
+            location_only_score = np.mean(np.abs(ridge_pipeline.predict(test_location_features) - y_test))
 
-    ridge_pipeline.fit(X_train, y_train)
-    test_score = np.mean(np.abs(ridge_pipeline.predict(X_test) - y_test))
-    print("Test Score (negative MAE):", test_score)
+            print(f"  CV MAE: {-location_cv_scores.mean():.4f} ± {location_cv_scores.std():.4f}")
+            print(f"  Test MAE: {location_only_score:.4f}")
+        else:
+            location_only_score = None
+        
+        # Combined features
+        print('3. Combined features:')
+        combined_cv_scores = cross_val_score(
+            ridge_pipeline, X_train, y_train, cv=kf, scoring="neg_mean_absolute_error"
+        )
+        ridge_pipeline.fit(X_train, y_train)
+        combined_score = np.mean(np.abs(ridge_pipeline.predict(X_test) - y_test))
+        
+        print(f"  CV MAE: {-combined_cv_scores.mean():.4f} ± {combined_cv_scores.std():.4f}")
+        print(f"  Test MAE: {combined_score:.4f}")
+        
+        # Calculate improvement
+        improvement = visual_only_score - combined_score
+        improvement_pct = (improvement / visual_only_score) * 100
+        print(f"\nImprovement from adding location: {improvement:.4f} MAE ({improvement_pct:.1f}%)")
+        
+        # Save detailed analysis
+        analysis_results = {
+            'visual_only_cv_mae': -visual_cv_scores.mean(),
+            'visual_only_cv_std': visual_cv_scores.std(),
+            'visual_only_test_mae': visual_only_score,
+            'location_only_test_mae': location_only_score,
+            'combined_cv_mae': -combined_cv_scores.mean(),
+            'combined_cv_std': combined_cv_scores.std(),
+            'combined_test_mae': combined_score,
+            'improvement_mae': improvement,
+            'improvement_pct': improvement_pct,
+            'visual_features_count': X_train_visual.shape[1],
+            'location_features_count': train_location_features.shape[1],
+            'total_features_count': X_train.shape[1],
+            'location_encoder_used': use_location_encoder,
+            'coord_encoding_method_used': coord_encoding_method,
+            'enhanced_targets_used': enhanced_targets
+        }
+        
+        pd.DataFrame([analysis_results]).to_csv(results_folder + "feature_analysis.csv", index=False)
+        
+        # Use combined results for final reporting
+        final_cv_scores = combined_cv_scores
+        final_test_score = combined_score
+    
+    else:
+        # Standard evaluation without location features
+        print('Visual features only: ')
+        final_cv_scores = cross_val_score(
+            ridge_pipeline, X_train, y_train, cv=kf, scoring="neg_mean_absolute_error"
+        )
+        ridge_pipeline.fit(X_train, y_train)
+        final_test_score = np.mean(np.abs(ridge_pipeline.predict(X_test) - y_test))
 
-    return test_score
+    # Final results
+    print(f"\n=== FINAL EVALUATION RESULTS ===")
+    print("Cross-validation scores (negative MAE):", final_cv_scores)
+    print("Mean cross-validation score (negative MAE):", final_cv_scores.mean())
+    print("Test Score (MAE):", final_test_score)
+
+    return final_test_score
 
 
 
@@ -255,6 +589,13 @@ if __name__ == '__main__':
     parser.add_argument('--use_checkpoint', action='store_true', help='Whether to use checkpoint file. If not, use raw model.')
     parser.add_argument('--model_not_named_target', action='store_false', help='Whether the model name contains the target variable')
     parser.add_argument('--grouped_bands', nargs='+', type=int, help="List of grouped bands")
+    parser.add_argument('--country', type=str, help='Two-letter country code for single country training (e.g., ET, KE)')
+    
+    parser.add_argument('--enhanced_targets', action='store_true', help='Use enhanced fine-tuning targets (with hv025)')
+    parser.add_argument('--use_location_features', action='store_true', help='Include location features')
+    parser.add_argument('--use_location_encoder', action='store_true', help='Use LocationEncoder for coordinates')
+    parser.add_argument('--coord_encoding_method', type=str, default='spherical_harmonics', 
+                       choices=['spherical_harmonics', 'siren'], help='Coordinate encoding method')
     
     args = parser.parse_args()
     maes = []
@@ -263,9 +604,20 @@ if __name__ == '__main__':
     elif args.mode == 'spatial':
         for i in range(5):
             fold = i + 1
-            mae = evaluate(str(fold), args.model_name, args.target, args.use_checkpoint,args.model_not_named_target,args.imagery_path, args.imagery_source, args.mode, args.model_output_dim, grouped_bands=args.grouped_bands)
+            mae = evaluate(
+                str(fold), args.model_name, args.target, args.use_checkpoint, args.model_not_named_target,
+                args.imagery_path, args.imagery_source, args.mode, args.model_output_dim, 
+                args.grouped_bands, args.country, args.enhanced_targets, args.use_location_features,
+                args.use_location_encoder, args.coord_encoding_method, 
+            )
             maes.append(mae)
-        print(np.mean(maes), np.std(maes)/np.sqrt(5))
+        
+        mean_mae = np.mean(maes)
+        std_err = np.std(maes) / np.sqrt(5)
+        print(f"\n=== SPATIAL EVALUATION SUMMARY ===")
+        print(f"Mean MAE: {mean_mae:.4f} ± {std_err:.4f}")
+        print(f"Individual MAEs: {[f'{mae:.4f}' for mae in maes]}")
+    
     elif args.mode == 'one_country':
         COUNTRIES = ['Madagascar', 'Burundi', 'Uganda', 'Mozambique', 'Rwanda',
                     'Zambia', 'Tanzania', 'Malawi', 'Ethiopia', 'Kenya', 'Zimbabwe',
