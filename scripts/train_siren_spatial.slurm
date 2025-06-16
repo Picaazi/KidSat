@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=train_siren_spatial_TZ%a
+#SBATCH --job-name=train_sh_siren_spatial_TZ%a
 #SBATCH --partition=magma
 #SBATCH --account=math022462
 #SBATCH --nodes=1
@@ -9,8 +9,8 @@
 #SBATCH --mem=64G
 #SBATCH --time=24:00:00
 #SBATCH --array=1-5  # Repository uses folds 1-5, not 0-4
-#SBATCH --output=logs/train_siren_spatial_TZ%A_%a.out
-#SBATCH --error=logs/train_siren_spatial_TZ%A_%a.err
+#SBATCH --output=logs/train_sh_siren_spatial_TZ%A_%a.out
+#SBATCH --error=logs/train_sh_siren_spatial_TZ%A_%a.err
 
 echo "Start time: $(date)"
 
@@ -19,7 +19,7 @@ export PYTHONPATH="/user/work/cy23765/kidsat_test/KidSat:$PYTHONPATH"
 
 # Create directories
 mkdir -p /user/work/cy23765/kidsat_test/KidSat/logs
-mkdir -p /user/work/cy23765/kidsat_test/KidSat/model_checkpoints/siren_spatial
+mkdir -p /user/work/cy23765/kidsat_test/KidSat/model_checkpoints/sh_siren_spatial
 
 cd /user/work/cy23765/kidsat_test/KidSat
 
@@ -31,8 +31,9 @@ python modelling/dino/finetune_siren.py \
     --representation_dim 128 \
     --hidden_dim 256 \
     --num_layers 4 \
-    --batch_size 16 \
+    --batch_size 32 \
     --num_epochs 200 \
+    --sh_L 15 \
     --country TZ
 
 echo "Job completed at: $(date)"

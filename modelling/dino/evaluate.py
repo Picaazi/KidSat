@@ -10,7 +10,7 @@ from sklearn.model_selection import KFold, cross_val_score
 from sklearn.linear_model import RidgeCV
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from models import PovertySiren
+from models import SphericalHarmonicsEncoder, PovertySirenSH, load_sh_siren_model, extract_sh_siren_features
 from torch.utils.data import Dataset, DataLoader
 import warnings
 
@@ -21,14 +21,14 @@ import os
 
 # Try to import LocationEncoder 
 try:
-    from locationencoder import LocationEncoder
     from locationencoder.pe import SphericalHarmonics
     LOCATION_ENCODER_AVAILABLE = True
     print("LocationEncoder available - using research-validated implementation")
 except ImportError:
     LOCATION_ENCODER_AVAILABLE = False
     print("LocationEncoder not available - using fallback implementation")
-    from scipy.special import sph_harm
+
+#LOCATION_ENCODER_AVAILABLE = False
 
 # Function to evaluate the model performance on given data
 # fold: Fold number or country name
@@ -43,207 +43,106 @@ except ImportError:
 # grouped_bands: which RGB bands to use for input image
 
 
-class SphericalHarmonicsEncoder:
-    def __init__(self, L=20, output_dim=256):
-        self.L = L
-        self.output_dim = output_dim
-    
-    def encode_coordinates(self, lat, lon):
-        """
-        Encode lat/lon using spherical harmonics
-        """
-        # Handle single values or arrays
-        lat = np.atleast_1d(lat)
-        lon = np.atleast_1d(lon)
-        
-        lat_rad = np.radians(lat)
-        lon_rad = np.radians(lon)
-        
-        harmonics_features = []
-        
-        for i in range(len(lat)):
-            features_i = []
-            for l in range(min(self.L + 1, 25)):  # Limit to prevent overflow
-                for m in range(-l, l + 1):
-                    try:
-                        Y_lm = sph_harm(m, l, lon_rad[i], lat_rad[i])
-                        features_i.extend([Y_lm.real, Y_lm.imag])
-                    except:
-                        features_i.extend([0.0, 0.0])  # Fallback for numerical issues
-            harmonics_features.append(features_i)
-        
-        harmonics_array = np.array(harmonics_features)
-        
-        # Pad or truncate to desired dimension
-        if harmonics_array.shape[1] > self.output_dim:
-            harmonics_array = harmonics_array[:, :self.output_dim]
-        elif harmonics_array.shape[1] < self.output_dim:
-            padding = np.zeros((harmonics_array.shape[0], self.output_dim - harmonics_array.shape[1]))
-            harmonics_array = np.concatenate([harmonics_array, padding], axis=1)
-        
-        return harmonics_array
-
 def prepare_location_features(df, fold, country=None, enhanced_targets=False,
                               use_location_encoder=False, coord_encoding_method='spherical_harmonics'):
     """
-    Prepare location features from DHS data (already processed)
+    UPDATED: Now supports SH + SIREN approach
     """
     all_features = []
     feature_names = []
 
-    print(f"Preparing location features with LocationEncoder: {use_location_encoder}")
+    print(f"Preparing location features with method: {coord_encoding_method}")
     
-    '''
-    # hv025 is already one-hot encoded as hv025_1 and hv025_2
-    location_columns = ['hv025_1', 'hv025_2']
+    if 'LATNUM' not in df.columns or 'LONGNUM' not in df.columns:
+        print("Missing coordinate columns: LATNUM, LONGNUM")
+        return None, []
     
-    # Check if columns exist
-    missing_cols = [col for col in location_columns if col not in df.columns]
-    if missing_cols:
-        raise ValueError(f"Missing location columns: {missing_cols}")
-    
-    # Extract urban/rural features
-    urban_rural_features = df[location_columns].values
-    all_features.append(urban_rural_features)
-    feature_names.extend(['urban_rural_0', 'urban_rural_1'])
-    
-    print(f"Urban/Rural feature distribution:")
-    print(f"  hv025_1 (Urban): {df['hv025_1'].sum()} samples ({df['hv025_1'].mean()*100:.1f}%)")
-    print(f"  hv025_2 (Rural): {df['hv025_2'].sum()} samples ({df['hv025_2'].mean()*100:.1f}%)")
-    '''
+    lat = df['LATNUM'].values
+    lon = df['LONGNUM'].values
 
-    if use_location_encoder and 'LATNUM' in df.columns and 'LONGNUM' in df.columns:
-        lat = df['LATNUM'].values
-        lon = df['LONGNUM'].values
+    if coord_encoding_method == 'sh_siren':
+        # NEW: Use SH + SIREN approach
+        print("Using SH + Fine-tuned SIREN method")
         
-        if LOCATION_ENCODER_AVAILABLE:
-            print(f"Using LocationEncoder with method: {coord_encoding_method}")
-            
+        model_par_dir = "modelling/dino/model/"
+        country_suffix = f'_{country.upper()}' if country else ''
+        enhanced_suffix = f'_enhanced' if enhanced_targets else ''
+        
+        # Look for SH + SIREN model
+        sh_siren_model_path = f"{model_par_dir}sh_siren_spatial_{fold}_best{country_suffix}{enhanced_suffix}.pth"
+        
+        if os.path.exists(sh_siren_model_path):
             try:
-                if coord_encoding_method == 'spherical_harmonics':
-                    # Use the direct SphericalHarmonics positional encoder (no trainable weights)
-                    print("Using SphericalHarmonics positional encoder")
-                    sh_encoder = SphericalHarmonics(legendre_polys=20)
-                    
-                    # Prepare coordinates in expected format [N, 2] where columns are [lon, lat] 
-                    lonlat_tensor = torch.tensor(np.column_stack([lon, lat]), dtype=torch.float32)
-                    
-                    # Encode coordinates
-                    with torch.no_grad():
-                        coord_features = sh_encoder(lonlat_tensor)
-                    
-                    # Convert to numpy
-                    if hasattr(coord_features, 'detach'):
-                        coord_features = coord_features.detach().numpy()
-                    
-                    all_features.append(coord_features)
-                    feature_names.extend([f'coord_sh_{i}' for i in range(coord_features.shape[1])])
-                    
-                    print(f"  Added spherical harmonics coordinate features: {coord_features.shape[1]} dimensions")
+                print(f"Loading SH + SIREN model: {sh_siren_model_path}")
                 
-                elif coord_encoding_method == 'siren':
-                    # Use the full LocationEncoder with Siren network 
-                    print("Using LocationEncoder with Siren network")
-                    try:
-                        # Build Siren model path
-                        model_par_dir = "modelling/dino/model/"
-                        country_suffix = f'_{country.upper()}' if country else ''
-                        enhanced_suffix = f'_enhanced' if enhanced_targets else ''
-                        
-                        siren_model_path = f"{model_par_dir}siren_spatial_{fold}_best{country_suffix}{enhanced_suffix}.pth"
-                        
-                        print(f"Loading Siren model from: {siren_model_path}")
-                        
-                        if not os.path.exists(siren_model_path):
-                            raise FileNotFoundError(f"Siren model not found: {siren_model_path}")
-                        
-                        # Load checkpoint
-                        checkpoint = torch.load(siren_model_path, map_location='cpu')
-                        
-                        # Get model parameters
-                        representation_dim = checkpoint['representation_dim']
-                        hidden_dim = checkpoint['hidden_dim']
-                        num_layers = checkpoint['num_layers']
-                        coord_scaler = checkpoint['coord_scaler']
-                        predict_target = checkpoint['predict_target']
-                        
-                        # Reconstruct model
-                        model = PovertySiren(
-                            input_dim=2,
-                            hidden_dim=hidden_dim,
-                            num_layers=num_layers,
-                            representation_dim=representation_dim
-                        )
-                        
-                        # Modify prediction head to match training
-                        model.prediction_head = nn.Sequential(
-                            nn.Linear(representation_dim, 128),
-                            nn.ReLU(),
-                            nn.Dropout(0.1),
-                            nn.Linear(128, 64),
-                            nn.ReLU(),
-                            nn.Dropout(0.1),
-                            nn.Linear(64, len(predict_target)),
-                            nn.Sigmoid()
-                        )
-                        
-                        # Load trained weights
-                        model.load_state_dict(checkpoint['model_state_dict'])
-                        model.eval()
-                        
-                        # Extract coordinates and scale them
-                        coordinates = np.column_stack([lat, lon])
-                        coords_scaled = coord_scaler.transform(coordinates)
-                        coords_tensor = torch.FloatTensor(coords_scaled)
-                        
-                        # Extract learned representations (not predictions)
-                        with torch.no_grad():
-                            coord_features = model.encode_coordinates(coords_tensor)
-                        
-                        # Convert to numpy
-                        coord_features = coord_features.numpy()
-                        
-                        all_features.append(coord_features)
-                        feature_names.extend([f'siren_poverty_{i}' for i in range(coord_features.shape[1])])
-                        
-                        print(f"  Added fine-tuned Siren coordinate features: {coord_features.shape[1]} dimensions")
-                        
-                    except Exception as e:
-                        print(f"Fine-tuned Siren failed: {e}")
-                        print("Falling back to spherical harmonics")
-                        use_location_encoder = False  # Fall back
+                # Load model
+                device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+                model, checkpoint = load_sh_siren_model(sh_siren_model_path, device)
+
+                # Extract location features
+                coordinates = np.column_stack([lat, lon])
+                coord_features = extract_sh_siren_features(model, coordinates, device, batch_size=64)
                 
-                else:
-                    raise ValueError(f"Unknown encoding method: {coord_encoding_method}")
+                all_features.append(coord_features)
+                feature_names.extend([f'sh_siren_{i}' for i in range(coord_features.shape[1])])
+                
+                print(f"Extracted {coord_features.shape[1]} SH + SIREN features")
+                print(f"   Model info: SH_L={checkpoint.get('sh_L', 15)}, repr_dim={checkpoint['representation_dim']}")
+                
+            except Exception as e:
+                print(f"Error loading SH + SIREN model: {e}")
+                print("   Falling back to spherical harmonics...")
+                coord_encoding_method = 'spherical_harmonics'
+        else:
+            print(f"SH + SIREN model not found: {sh_siren_model_path}")
+            print("   Train the model first using: python finetune_siren.py")
+            print("   Falling back to spherical harmonics...")
+            coord_encoding_method = 'spherical_harmonics'
+
+    
+    if coord_encoding_method == 'spherical_harmonics':
+        # FALLBACK: Basic spherical harmonics
+        print("Using basic spherical harmonics")
+        
+        if use_location_encoder and LOCATION_ENCODER_AVAILABLE:
+            try:
+                print("Using LocationEncoder SphericalHarmonics")
+                sh_encoder = SphericalHarmonics(legendre_polys=20)
+                lonlat_tensor = torch.tensor(np.column_stack([lon, lat]), dtype=torch.float32)
+                
+                with torch.no_grad():
+                    coord_features = sh_encoder(lonlat_tensor)
+                
+                if hasattr(coord_features, 'detach'):
+                    coord_features = coord_features.detach().numpy()
+                
+                all_features.append(coord_features)
+                feature_names.extend([f'locationenc_sh_{i}' for i in range(coord_features.shape[1])])
+                
+                print(f"Added LocationEncoder SH features: {coord_features.shape[1]} dimensions")
                 
             except Exception as e:
                 print(f"LocationEncoder failed: {e}")
-                print("Falling back to simple spherical harmonics")
                 use_location_encoder = False
         
         if not use_location_encoder or not LOCATION_ENCODER_AVAILABLE:
             print("Using fallback spherical harmonics implementation")
-            coord_encoder = SphericalHarmonicsEncoder(L=15, output_dim=128)
+            
+            coord_encoder = SphericalHarmonicsEncoder(L=15)
             coord_features = coord_encoder.encode_coordinates(lat, lon)
             all_features.append(coord_features)
-            feature_names.extend([f'coord_sh_{i}' for i in range(coord_features.shape[1])])
-
-        '''
-        geographic_features = np.column_stack([
-            np.abs(lat),  # Distance to equator
-            np.abs(lon),  # Distance to prime meridian
-            (np.abs(lat) < 23.5).astype(int),  # Tropical zone indicator
-        ])
-        all_features.append(geographic_features)
-        feature_names.extend(['dist_equator', 'dist_prime_meridian', 'tropical_zone'])
-        
-        print(f"  Added basic geographic features: {geographic_features.shape[1]} features")
-        '''
+            feature_names.extend([f'fallback_sh_{i}' for i in range(coord_features.shape[1])])
+            
+            print(f"Added fallback SH features: {coord_features.shape[1]} dimensions")
 
     # Combine all features
-    combined_features = np.concatenate(all_features, axis=1)
-    
-    return combined_features, feature_names
+    if all_features:
+        combined_features = np.concatenate(all_features, axis=1)
+        print(f"Total location features: {combined_features.shape[1]} dimensions")
+        return combined_features, feature_names
+    else:
+        print("No location features could be generated")
+        return None, []
 
 def evaluate(
     fold,
@@ -635,7 +534,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_location_features', action='store_true', help='Include location features')
     parser.add_argument('--use_location_encoder', action='store_true', help='Use LocationEncoder for coordinates')
     parser.add_argument('--coord_encoding_method', type=str, default='spherical_harmonics', 
-                       choices=['spherical_harmonics', 'siren'], help='Coordinate encoding method')
+                       choices=['spherical_harmonics', 'sh_siren'], help='Coordinate encoding method')
     
     args = parser.parse_args()
     maes = []
