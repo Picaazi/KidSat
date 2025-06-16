@@ -218,16 +218,14 @@ def evaluate(fold, model_name, target="", use_checkpoint=False, model_not_named_
     results_folder = (
         f"modelling/dino/results/split_new_{mode}{imagery_source}_{fold}_{grouped_bands}/"
     )
+    
     if not os.path.exists(results_folder):
         os.makedirs(results_folder)
+        
     pd.DataFrame(X_train).to_csv(results_folder + "X_train.csv", index=False)
-    pd.DataFrame(y_train, columns=["target"]).to_csv(
-        results_folder + "y_train.csv", index=False
-    )
+    pd.DataFrame(y_train, columns=["target"]).to_csv(results_folder + "y_train.csv", index=False)
     pd.DataFrame(X_test).to_csv(results_folder + "X_test.csv", index=False)
-    pd.DataFrame(y_test, columns=["target"]).to_csv(
-        results_folder + "y_test.csv", index=False
-    )
+    pd.DataFrame(y_test, columns=["target"]).to_csv(results_folder + "y_test.csv", index=False)
 
     # Ridge Regression with cross-validation to evaluate features
     alphas = np.logspace(-6, 6, 20)
@@ -246,9 +244,6 @@ def evaluate(fold, model_name, target="", use_checkpoint=False, model_not_named_
     ridge_pipeline.fit(X_train, y_train)
     test_score = np.mean(np.abs(ridge_pipeline.predict(X_test) - y_test))
     print("Test Score (negative MAE):", test_score)
-    
-    
-
 
     # # Make sure data is in float32 format for PyTorch
     # X_train_tensor = torch.tensor(X_train, dtype=torch.float32)

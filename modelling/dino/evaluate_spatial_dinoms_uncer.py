@@ -23,8 +23,14 @@ from tqdm import tqdm
 def evaluate(fold, model_name, target="", use_checkpoint=False, imagery_path=None, imagery_source=None, mode="temporal"):
     
     model_par_dir = r"modelling/dino/model/"
-
-    import os
+    
+    # Determine size of target
+    if target == "":
+        eval_target = "deprived_sev"
+        target_size = 99
+    else:
+        eval_target = target
+        target_size = 1 if model_not_named_target else 99
 
     best_model = (f"{model_name}ms_uncer_{fold}_all_cluster_best_{imagery_source}{target}_.pth")
     checkpoint = os.path.join(model_par_dir, best_model)
@@ -155,7 +161,6 @@ def evaluate(fold, model_name, target="", use_checkpoint=False, imagery_path=Non
         print(f"Loading checkpoint from {checkpoint}")
         state_dict = torch.load(checkpoint)
         model.load_state_dict(state_dict["model_state_dict"])
-    eval_target = target
 
     # class CustomDataset(Dataset):
     #     def __init__(self, dataframe, transform):
@@ -188,8 +193,8 @@ def evaluate(fold, model_name, target="", use_checkpoint=False, imagery_path=Non
         ]
     )
 
-    train_dataset = CustomDataset(train_df, transform, normalization, predict_target, all=True)
-    val_dataset = CustomDataset(test_df, transform, normalization, predict_target, all=True)
+    train_dataset = CustomDataset(train_df, transform, normalization, eval_target, all=True)
+    val_dataset = CustomDataset(test_df, transform, normalization, eval_target, all=True)
 
     train_loader = DataLoader(train_dataset, batch_size=1, shuffle=False, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=4)
@@ -206,6 +211,7 @@ def evaluate(fold, model_name, target="", use_checkpoint=False, imagery_path=Non
 
     X_train = []
     y_train = []
+    
     for batch in tqdm(train_loader):
         images, targets = batch
         images, targets = images.to(device), targets.to(device)
@@ -215,13 +221,16 @@ def evaluate(fold, model_name, target="", use_checkpoint=False, imagery_path=Non
             outputs = model(images)
         outputs = [o.cpu()[0].numpy()[0] for o in outputs]
         print(outputs, targets, "train")
+        
         X_train.append(outputs)
         y_train.append(targets.cpu()[0].numpy())
 
     torch.cuda.empty_cache()
+    
     # Validation phase
     X_test = []
     y_test = []
+    
     for batch in tqdm(val_loader):
         images, targets = batch
         images, targets = images.to(device), targets.to(device)
@@ -251,8 +260,26 @@ def evaluate(fold, model_name, target="", use_checkpoint=False, imagery_path=Non
     df_y_train.to_csv(results_folder + "y_train.csv", index=False)
     df_X_test.to_csv(results_folder + "X_test.csv", index=False)
     df_y_test.to_csv(results_folder + "y_test.csv", index=False)
+    
+    # Ridge Regression with cross-validation to evaluate features
+    alphas = np.logspace(-6, 6, 20)
+    ridge_pipeline = Pipeline(
+        [("ridge", RidgeCV(alphas=alphas, cv=5, scoring="neg_mean_absolute_error"))]
+    )
 
-    return None
+    kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    cv_scores = cross_val_score(
+        ridge_pipeline, X_train, y_train, cv=kf, scoring="neg_mean_absolute_error"
+    )
+
+    print("Cross-validation scores (negative MAE):", cv_scores)
+    print("Mean cross-validation score (negative MAE):", cv_scores.mean())
+
+    ridge_pipeline.fit(X_train, y_train)
+    test_score = np.mean(np.abs(ridge_pipeline.predict(X_test) - y_test))
+    print("Test Score (negative MAE):", test_score)
+
+    return test_score
 
 
 if __name__ == "__main__":
