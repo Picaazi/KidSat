@@ -77,19 +77,13 @@ def process_dhs(dhs_data_dir, target_country=None):
     pov_df_all = agg_pov_dfs(pov_dfs)
     centroid_df = get_geo_data(dhs_data_dir, target_country)
     
-    """Joshua: we have to replace some of the project from centroid to correct year in dhs_df_all"""
-    centroid_df["CENTROID_ID"] = centroid_df["CENTROID_ID"].str.replace(r"^ET2010", "ET2011", regex=True)
-    centroid_df["CENTROID_ID"] = centroid_df["CENTROID_ID"].str.replace(r"^RW2008", "RW2007", regex=True)
-    centroid_df["CENTROID_ID"] = centroid_df["CENTROID_ID"].str.replace(r"^ZA2017", "ZA2016", regex=True)
-
     # merge dhs, poverty data and GPS data on centroid ID/id
     merged_centroid_df = pd.merge(centroid_df, pov_df_all, left_on='CENTROID_ID', right_on='id', how='left')
     merged_centroid_df = pd.merge(merged_centroid_df, dhs_df_all, left_on='CENTROID_ID', right_on='id', how='left')
 
     # remove some cols after join
     merged_centroid_df = merged_centroid_df.drop(["hhid", "indid", "id_x", "id_y", "year_interview"], axis=1)
-    merged_centroid_df["hv271"].min()
-    merged_centroid_df["hv271"].max()
+
     # min/max scale cols
     df_processed = min_max_scale(merged_centroid_df)
 
@@ -548,8 +542,6 @@ def get_water_depr(df):
     mask_mod = (df['dep_water_mod'] == 0) & (~df['hv201'].isin([32, 42, 43, 96])) & (df['hv204'] > 30) & (df['hv204'] <= 900)
     df.loc[mask_mod, 'dep_water_mod'] = 1
 
-    "Here we would replace the value of variable hv204 to zero in case if the response is 996, i.e its on premises"
-    df['hv204'] = df['hv204'].replace(996, 0)
     return df
 
 
@@ -667,10 +659,8 @@ def get_health_depr(df):
     df.loc[age_filter & need_filter & (df['v312'] == 99), 'contramethodseverelydep'] = pd.NA  # Handling missing data as NaN
 
     # Moderate (+ severe) deprivation: Includes girls using traditional methods of contraception
-    traditional_methods = [8, 9, 10]  # Assuming these codes indicate traditional methods
     df['contramethodmoderatedep'] = 0  # Initialize column
-    """Joshua: I would merge v312_8 v312_9 and v312_10 to v312_trad here"""
-    df['v312_trad'] = df['v312'].isin([8, 9, 10])
+    traditional_methods = [8, 9, 10]  # Assuming these codes indicate traditional methods
     df.loc[age_filter & need_filter & (df['v312'].isin([0] + traditional_methods)), 'contramethodmoderatedep'] = 1
     df.loc[age_filter & need_filter & (df['v312'] == 99), 'contramethodmoderatedep'] = pd.NA  # Handling missing data as NaN
 
@@ -863,32 +853,8 @@ def agg_dhs_dfs(dhs_dfs):
     """
 
     # we will remove rows if variables are above these thresholds
-    """Joshua: here we will change the thresholds - 
-    1. remove the orphanhood indicators hv111 and hv113,
-    2. changing hv271 to 500000, as it's acceptable to have range up to 1e6 
-    
-    """
-    # thresholds = config_data['thresholds']
-    
-    thresholds = {
-        "h10": 2,
-        "h3": 3,
-        "h31": 2,
-        "h5": 3,
-        "h7": 3,
-        "h9": 9,
-        "hc70": 600,
-        "hv109": 5,
-        "hv121": 2,
-        "hv106": 3,
-        "hv201": 71,
-        "hv204": 720,
-        "hv205": 43,
-        "hv216": 24,
-        "hv225": 2,
-        "hv271": 500000,  #this is changed
-        "v312": 20,
-    }
+    thresholds = config_data['thresholds']
+
     # categorical columns to one hot encode
     columns_to_encode = config_data['categorical']
 
@@ -995,6 +961,7 @@ def get_geo_data(dhs_data_dir, target_country=None):
     # iterate through all DHS surveys
     for f in os.listdir(dhs_data_dir):
         if 'DHS' in f:
+
             # Filter by country if specified
             if target_country and not f.startswith(target_country):
                 continue
@@ -1040,11 +1007,9 @@ def min_max_scale(df):
         df_processed (pd.DataFrame): Scaled DataFrame of merged DHS, poverty and geographic data.
     """
 
-
-
     # list of columns we don't want to scale
     no_scale_cols = ["CENTROID_ID", "SURVEY_NAME", "COUNTRY", "YEAR",
-                    "LATNUM", "LONGNUM", "cluster", "hv001"]
+                    "LATNUM", "LONGNUM", "cluster"]
     
     # drop these columns so then we scale a subset of the DataFrame
     df_subset = df.drop(no_scale_cols, axis=1)
@@ -1076,6 +1041,7 @@ def min_max_scale(df):
     # Save min-max dictionary locally
     with open(min_max_file, 'w') as f:
         json.dump(min_max_dict, f, indent=4)
+
     return df_processed
 
 
@@ -1094,62 +1060,23 @@ def save_split(df, save_dir, target_country=None):
     Returns:
         None
     """ 
-    
-    # "Added by Joshua for temp testing"
-    # essential_cols = ["v312_1", "hv001", "hv205_14", "hv201_31", "h3_3", "hv201_71", 
-    #                   "v312_5", "v312_13", "hv201_45", "hv201_14", "hv007", "hv205_23", 
-    #                   "hv205_24", "hv205_31", "hv201_33", "v312_16", "v312_11", "hv205_27", 
-    #                   "hv121_1", "h7_0", "h7_1", "hv005", "v312_3", "hv201_23", 
-    #                   "hv205_12", "hv201_62", "hv201_46", "hv201_13", "hv109_3", "h10_0", 
-    #                   "v312_2", "v312_6",  "b19", "hv271", "h9_8", "hv201_32", 
-    #                   "hv205_13", "hv270", "hv009", "hv201_44", "hv109_4", "hv201_36", 
-    #                   "hv205_22", "hv216", "h9_0", "hv201_22", "hv201_35", "h9_1", 
-    #                   "hc70", "hv204", "hv205_28", "hv201_25", "h5_0", "h31_0", 
-    #                   "v005", "h31_2", "v312_9", "h9_2", "hv201_21", "v312_0", 
-    #                   "h5_3", "hv205_41", "hv109_5", "v312_10", "hv111", "hv201_11", 
-    #                   "hv201_12", "h3_2", "h7_3", "h5_2", "hv205_29", "v312_14", 
-    #                   "hv201_41", "h5_1", "hv109_1", "hv121_2", "hv121_0", "h3_1", 
-    #                   "hv113", "hv109_0", "hv201_42", "hv201_61", "hv201_24", "h7_2", 
-    #                   "hv225", "h9_3", "h9_9", "hv205_42", "hv105", "hv201_34", 
-    #                   "hv201_51", "v312_18", "hv205_19", "hv122",  "hv205_15", "hv205_17", 
-    #                   "hv201_43", "hv205_21", "v312_8", "h3_0", "hv002", "hv104", 
-    #                   "hv205_43", "h10_1", "hv201_63", "hv024", "hv205_25", "hv109_2", 
-    #                   "hv205_11", "hv205_16", "v312_17", "hv205_18", "hv205_26"]
- 
-    # # Drop rows where all these columns are NaN
-    # df = df[~df[essential_cols].isnull().all(axis=1)]
- 
-    # # Drop rows where all these columns are zero (after scaling, they'll be in [0,1])
-    # df = df[~(df[essential_cols].sum(axis=1) == 0)]
-    
-    """Joshua: Here is the test on reducing the variables with very limited entries within each columns
-        aiming to reduce from 99 variables to around 70 variables
-    """
-    # Count of non-zero and non-null per column
-    non_zero_non_null = df.notnull() & (df != 0)
-    counts = non_zero_non_null.sum()
-    proportions = counts / len(df)
-
-    threshold = 0.01
-    columns_to_keep = (proportions >= threshold) | (df.columns == 'v312_trad')
-    df_cleaned = df.loc[:, columns_to_keep]
 
     # Create country suffix
     country_suffix = f'_{target_country}' if target_country else ''
-
+    
     # save processed dataframe
     df.to_csv(f'{save_dir}dhs_processed{country_suffix}.csv', index=False)
 
     # shuffle dataframe
-    df_cleaned = df_cleaned.sample(frac=1, random_state=42)
+    df = df.sample(frac=1, random_state=42)
 
     # split and save data into 5 train/test folds
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
     fold = 1
-    for train_index, test_index in kf.split(df_cleaned):
+    for train_index, test_index in kf.split(df):
         # Generate train and test subsets
-        train_df = df_cleaned.iloc[train_index]
-        test_df = df_cleaned.iloc[test_index]
+        train_df = df.iloc[train_index]
+        test_df = df.iloc[test_index]
         
         # Save to CSV files
         train_df.to_csv(f'{save_dir}train_fold_{fold}{country_suffix}.csv', index=False)
@@ -1158,8 +1085,8 @@ def save_split(df, save_dir, target_country=None):
         fold += 1
 
     # also save pre/post 2020 data
-    old_df = df_cleaned[df_cleaned['YEAR'] < 2020]
-    new_df = df_cleaned[df_cleaned['YEAR'] >= 2020]
+    old_df = df[df['YEAR'] < 2020]
+    new_df = df[df['YEAR'] >= 2020]
     new_df.to_csv(f'{save_dir}after_2020.csv', index=False)
     old_df.to_csv(f'{save_dir}before_2020.csv', index=False)
 
