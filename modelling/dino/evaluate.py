@@ -374,6 +374,19 @@ def evaluate(
     X_train_visual, y_train = np.array(X_train_visual), np.array(y_train)
     X_test_visual, y_test = np.array(X_test_visual), np.array(y_test)
 
+    # Extract metadata for geographic analysis
+    train_metadata = {
+        'CENTROID_ID': train_df['CENTROID_ID'].values,
+        'LATNUM': train_df['LATNUM'].values,
+        'LONGNUM': train_df['LONGNUM'].values,
+    }
+
+    test_metadata = {
+        'CENTROID_ID': test_df['CENTROID_ID'].values,
+        'LATNUM': test_df['LATNUM'].values,
+        'LONGNUM': test_df['LONGNUM'].values,
+    }
+
     # Combine visual and location features
     if use_location_features:
         # Since DataLoader processes samples in order and we reset indices,
@@ -393,12 +406,10 @@ def evaluate(
 
     # Save extracted features and targets to CSV
     results_folder = (
-        f"modelling/dino/results/split_{mode}{imagery_source}_{fold}_{grouped_bands}"
+        f"modelling/dino/results/split_{mode}{imagery_source}_{fold}"
         f"{'_loc' if use_location_features else ''}"
-        f"{'_locenc' if use_location_encoder else ''}"
         f"{'_enh' if enhanced_targets else ''}"
         f"{country_suffix}/"
-
     )
     if not os.path.exists(results_folder):
         os.makedirs(results_folder)
@@ -408,9 +419,7 @@ def evaluate(
     pd.DataFrame(X_test).to_csv(f"{results_folder}X_test_combined.csv", index=False)
     pd.DataFrame(X_train_visual).to_csv(f"{results_folder}X_train_visual.csv", index=False)
     pd.DataFrame(X_test_visual).to_csv(f"{results_folder}X_test_visual.csv", index=False)
-    pd.DataFrame(y_train, columns=["target"]).to_csv(f"{results_folder}y_train.csv", index=False)
-    pd.DataFrame(y_test, columns=["target"]).to_csv(f"{results_folder}y_test.csv", index=False)
-    
+
     if use_location_features:
         pd.DataFrame(train_location_features).to_csv(f"{results_folder}X_train_location.csv", index=False)
         pd.DataFrame(test_location_features).to_csv(f"{results_folder}X_test_location.csv", index=False)
@@ -472,6 +481,7 @@ def evaluate(
         improvement_pct = (improvement / visual_only_score) * 100
         print(f"\nImprovement from adding location: {improvement:.4f} MAE ({improvement_pct:.1f}%)")
         
+        '''
         # Save detailed analysis
         analysis_results = {
             'visual_only_cv_mae': -visual_cv_scores.mean(),
@@ -492,6 +502,7 @@ def evaluate(
         }
         
         pd.DataFrame([analysis_results]).to_csv(results_folder + "feature_analysis.csv", index=False)
+        '''
         
         # Use combined results for final reporting
         final_cv_scores = combined_cv_scores
@@ -505,6 +516,33 @@ def evaluate(
         )
         ridge_pipeline.fit(X_train, y_train)
         final_test_score = np.mean(np.abs(ridge_pipeline.predict(X_test) - y_test))
+
+
+    # Save predictions with metadata for map visualization
+    ridge_pipeline.fit(X_train, y_train)
+    train_predictions = ridge_pipeline.predict(X_train)
+    test_predictions = ridge_pipeline.predict(X_test)
+    
+    # Create comprehensive results for geographic analysis
+    train_results = pd.DataFrame({
+        'target': y_train,
+        'prediction': train_predictions,
+        'error': np.abs(y_train - train_predictions),
+        **train_metadata
+    })
+    
+    test_results = pd.DataFrame({
+        'target': y_test,
+        'prediction': test_predictions,
+        'error': np.abs(y_test - test_predictions),
+        **test_metadata
+    })
+
+    # Save separete files for analysis
+    train_results.to_csv(f"{results_folder}train_predictions_with_metadata.csv", index=False)
+    test_results.to_csv(f"{results_folder}test_predictions_with_metadata.csv", index=False)
+
+    print(f"\nSaved results with geographic metadata to {results_folder}")
 
     # Final results
     print(f"\n=== FINAL EVALUATION RESULTS ===")

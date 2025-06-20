@@ -156,7 +156,6 @@ class PovertySirenSH(nn.Module):
     Enhanced Siren network with Spherical Harmonics preprocessing
     Input: (lat, lon) coordinates → SH features → SIREN → poverty prediction
     """
-
     def __init__(self, sh_L=15, hidden_dim=256, num_layers=4,
                  representation_dim=128, omega_0=30.0):
         super().__init__()
