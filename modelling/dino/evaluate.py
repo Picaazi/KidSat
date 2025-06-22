@@ -407,7 +407,8 @@ def evaluate(
     # Save extracted features and targets to CSV
     results_folder = (
         f"modelling/dino/results/split_{mode}{imagery_source}_{fold}"
-        f"{'_loc' if use_location_features else ''}"
+        f"{'_sh' if coord_encoding_method == 'spherical_harmonics' else ''}"
+        f"{'_sh_siren' if coord_encoding_method == 'sh_siren' else ''}"
         f"{'_enh' if enhanced_targets else ''}"
         f"{country_suffix}/"
     )
