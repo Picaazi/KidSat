@@ -34,7 +34,7 @@ python modelling/dino/finetune_siren.py \
     --batch_size 32 \
     --num_epochs 200 \
     --sh_L 15 \
-    --country TZ
+    --cleaned
 
 echo "Job completed at: $(date)"
 echo "Siren spatial training fold $SLURM_ARRAY_TASK_ID completed"

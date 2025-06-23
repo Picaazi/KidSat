@@ -44,7 +44,7 @@ except ImportError:
 
 
 def prepare_location_features(df, fold, country=None, enhanced_targets=False,
-                              use_location_encoder=False, coord_encoding_method='spherical_harmonics'):
+                              use_location_encoder=False, coord_encoding_method='spherical_harmonics', cleaned=False):
     """
     UPDATED: Now supports SH + SIREN approach
     """
@@ -67,9 +67,10 @@ def prepare_location_features(df, fold, country=None, enhanced_targets=False,
         model_par_dir = "modelling/dino/model/"
         country_suffix = f'_{country.upper()}' if country else ''
         enhanced_suffix = f'_enhanced' if enhanced_targets else ''
+        cleaned_suffix = '_cleaned' if cleaned else ''
         
         # Look for SH + SIREN model
-        sh_siren_model_path = f"{model_par_dir}sh_siren_spatial_{fold}_best{country_suffix}{enhanced_suffix}.pth"
+        sh_siren_model_path = f"{model_par_dir}sh_siren_spatial_{fold}_best{country_suffix}{enhanced_suffix}{cleaned_suffix}.pth"
         
         if os.path.exists(sh_siren_model_path):
             try:
@@ -159,11 +160,13 @@ def evaluate(
     enhanced_targets=False,
     use_location_features=False, # Use Geo info 
     use_location_encoder=False,
-    coord_encoding_method='spherical_harmonics'
+    coord_encoding_method='spherical_harmonics',
+    cleaned=False, # Use cleaned data or not
 ):
     model_par_dir = "modelling/dino/model/"
     country_suffix = f'_{country.upper()}' if country else ''
     enhanced_suffix = f'_enhanced' if enhanced_targets else ''
+    cleaned_suffix = '_cleaned' if cleaned else ''
 
     # Build checkpoint filename (pth file) based on mode and target
     if use_checkpoint:
@@ -171,7 +174,7 @@ def evaluate(
         if mode == "temporal":
             checkpoint = f"{model_par_dir}{model_name}_temporal_best_{imagery_source}{named_target}{country_suffix}{enhanced_suffix}.pth"
         elif mode == "spatial":
-            checkpoint = f"{model_par_dir}{model_name}_{fold}_{grouped_bands}all_cluster_best_{imagery_source}{named_target}{country_suffix}{enhanced_suffix}.pth"
+            checkpoint = f"{model_par_dir}{model_name}_{fold}_{grouped_bands}all_cluster_best_{imagery_source}{named_target}{country_suffix}{enhanced_suffix}{cleaned_suffix}.pth"
         elif mode == "one_country":
             checkpoint = f"{model_par_dir}{model_name}_{fold}_one_country_best_{imagery_source}{named_target}{country_suffix}{enhanced_suffix}.pth"
         else:
@@ -230,8 +233,8 @@ def evaluate(
         train_df = pd.read_csv(f"{data_folder}before_2020.csv")
         test_df = pd.read_csv(f"{data_folder}after_2020.csv")
     else:
-        train_df = pd.read_csv(f"{data_folder}train_fold_{fold}{country_suffix}.csv")
-        test_df = pd.read_csv(f"{data_folder}test_fold_{fold}{country_suffix}.csv")
+        train_df = pd.read_csv(f"{data_folder}train_fold_{fold}{country_suffix}{cleaned_suffix}.csv")
+        test_df = pd.read_csv(f"{data_folder}test_fold_{fold}{country_suffix}{cleaned_suffix}.csv")
 
     
     # Filter out imagery files that match the source type (L or S)
@@ -269,11 +272,11 @@ def evaluate(
     if use_location_features:
         print("Preparing training location features...")
         train_location_features, feature_names = prepare_location_features(train_df, fold, country, enhanced_targets,
-            use_location_encoder, coord_encoding_method)
+            use_location_encoder, coord_encoding_method, cleaned)
         
         print("Preparing test location features...")
         test_location_features, _ = prepare_location_features(test_df, fold, country, enhanced_targets,
-            use_location_encoder, coord_encoding_method)
+            use_location_encoder, coord_encoding_method, cleaned)
     else:
         train_location_features = None
         test_location_features = None
@@ -374,6 +377,19 @@ def evaluate(
     X_train_visual, y_train = np.array(X_train_visual), np.array(y_train)
     X_test_visual, y_test = np.array(X_test_visual), np.array(y_test)
 
+    # Extract metadata for geographic analysis
+    train_metadata = {
+        'CENTROID_ID': train_df['CENTROID_ID'].values,
+        'LATNUM': train_df['LATNUM'].values,
+        'LONGNUM': train_df['LONGNUM'].values,
+    }
+
+    test_metadata = {
+        'CENTROID_ID': test_df['CENTROID_ID'].values,
+        'LATNUM': test_df['LATNUM'].values,
+        'LONGNUM': test_df['LONGNUM'].values,
+    }
+
     # Combine visual and location features
     if use_location_features:
         # Since DataLoader processes samples in order and we reset indices,
@@ -393,12 +409,13 @@ def evaluate(
 
     # Save extracted features and targets to CSV
     results_folder = (
-        f"modelling/dino/results/split_{mode}{imagery_source}_{fold}_{grouped_bands}"
-        f"{'_loc' if use_location_features else ''}"
-        f"{'_locenc' if use_location_encoder else ''}"
+        f"modelling/dino/results/split_{mode}{imagery_source}_{fold}"
+        f"{'_sh' if coord_encoding_method == 'spherical_harmonics' else ''}"
+        f"{'_sh_siren' if coord_encoding_method == 'sh_siren' else ''}"
         f"{'_enh' if enhanced_targets else ''}"
-        f"{country_suffix}/"
-
+        f"{country_suffix}"
+        f"{cleaned_suffix if cleaned else ''}"
+        f"/"
     )
     if not os.path.exists(results_folder):
         os.makedirs(results_folder)
@@ -408,9 +425,7 @@ def evaluate(
     pd.DataFrame(X_test).to_csv(f"{results_folder}X_test_combined.csv", index=False)
     pd.DataFrame(X_train_visual).to_csv(f"{results_folder}X_train_visual.csv", index=False)
     pd.DataFrame(X_test_visual).to_csv(f"{results_folder}X_test_visual.csv", index=False)
-    pd.DataFrame(y_train, columns=["target"]).to_csv(f"{results_folder}y_train.csv", index=False)
-    pd.DataFrame(y_test, columns=["target"]).to_csv(f"{results_folder}y_test.csv", index=False)
-    
+
     if use_location_features:
         pd.DataFrame(train_location_features).to_csv(f"{results_folder}X_train_location.csv", index=False)
         pd.DataFrame(test_location_features).to_csv(f"{results_folder}X_test_location.csv", index=False)
@@ -472,6 +487,7 @@ def evaluate(
         improvement_pct = (improvement / visual_only_score) * 100
         print(f"\nImprovement from adding location: {improvement:.4f} MAE ({improvement_pct:.1f}%)")
         
+        '''
         # Save detailed analysis
         analysis_results = {
             'visual_only_cv_mae': -visual_cv_scores.mean(),
@@ -492,6 +508,7 @@ def evaluate(
         }
         
         pd.DataFrame([analysis_results]).to_csv(results_folder + "feature_analysis.csv", index=False)
+        '''
         
         # Use combined results for final reporting
         final_cv_scores = combined_cv_scores
@@ -505,6 +522,33 @@ def evaluate(
         )
         ridge_pipeline.fit(X_train, y_train)
         final_test_score = np.mean(np.abs(ridge_pipeline.predict(X_test) - y_test))
+
+
+    # Save predictions with metadata for map visualization
+    ridge_pipeline.fit(X_train, y_train)
+    train_predictions = ridge_pipeline.predict(X_train)
+    test_predictions = ridge_pipeline.predict(X_test)
+    
+    # Create comprehensive results for geographic analysis
+    train_results = pd.DataFrame({
+        'target': y_train,
+        'prediction': train_predictions,
+        'error': np.abs(y_train - train_predictions),
+        **train_metadata
+    })
+    
+    test_results = pd.DataFrame({
+        'target': y_test,
+        'prediction': test_predictions,
+        'error': np.abs(y_test - test_predictions),
+        **test_metadata
+    })
+
+    # Save separete files for analysis
+    train_results.to_csv(f"{results_folder}train_predictions_with_metadata.csv", index=False)
+    test_results.to_csv(f"{results_folder}test_predictions_with_metadata.csv", index=False)
+
+    print(f"\nSaved results with geographic metadata to {results_folder}")
 
     # Final results
     print(f"\n=== FINAL EVALUATION RESULTS ===")
@@ -535,6 +579,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_location_encoder', action='store_true', help='Use LocationEncoder for coordinates')
     parser.add_argument('--coord_encoding_method', type=str, default='spherical_harmonics', 
                        choices=['spherical_harmonics', 'sh_siren'], help='Coordinate encoding method')
+    parser.add_argument('--cleaned', action='store_true', help='Use cleaned data or not')
     
     args = parser.parse_args()
     maes = []
@@ -547,7 +592,7 @@ if __name__ == '__main__':
                 str(fold), args.model_name, args.target, args.use_checkpoint, args.model_not_named_target,
                 args.imagery_path, args.imagery_source, args.mode, args.model_output_dim, 
                 args.grouped_bands, args.country, args.enhanced_targets, args.use_location_features,
-                args.use_location_encoder, args.coord_encoding_method, 
+                args.use_location_encoder, args.coord_encoding_method, args.cleaned
             )
             maes.append(mae)
         

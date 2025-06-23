@@ -51,7 +51,7 @@ with open(cc_file, 'r') as file:
     dhs_cc = json.load(file)
 
 
-def process_dhs(dhs_data_dir, target_country=None):
+def process_dhs(dhs_data_dir, target_country=None, cleaned=False):
     """
     Creates DHS DataFrames and Poverty DataFrames containing poverty deprivation indicators.
     Aggregates these DataFrames to the cluster level and joins these DataFrames with the GPS data.
@@ -101,7 +101,7 @@ def process_dhs(dhs_data_dir, target_country=None):
     df_processed[matching_columns] = df_processed[matching_columns].fillna(0)
     
     # save dataframe and train/test splits
-    save_split(df_processed, save_processed_dir, target_country)
+    save_split(df_processed, save_processed_dir, target_country, cleaned)
 
 
 def get_dhs_and_pov_dfs(dhs_data_dir, target_country=None):
@@ -1079,7 +1079,7 @@ def min_max_scale(df):
     return df_processed
 
 
-def save_split(df, save_dir, target_country=None):
+def save_split(df, save_dir, target_country=None, cleaned=False):
     """
     Given the fully processed merged DHS, poverty and geographic DataFrame,
     We first save this in the save directory,
@@ -1136,9 +1136,10 @@ def save_split(df, save_dir, target_country=None):
 
     # Create country suffix
     country_suffix = f'_{target_country}' if target_country else ''
+    cleaned_suffix = '_cleaned' if cleaned else ''
 
     # save processed dataframe
-    df.to_csv(f'{save_dir}dhs_processed{country_suffix}.csv', index=False)
+    df.to_csv(f'{save_dir}dhs_processed{country_suffix}{cleaned_suffix}.csv', index=False)
 
     # shuffle dataframe
     df_cleaned = df_cleaned.sample(frac=1, random_state=42)
@@ -1152,8 +1153,8 @@ def save_split(df, save_dir, target_country=None):
         test_df = df_cleaned.iloc[test_index]
         
         # Save to CSV files
-        train_df.to_csv(f'{save_dir}train_fold_{fold}{country_suffix}.csv', index=False)
-        test_df.to_csv(f'{save_dir}test_fold_{fold}{country_suffix}.csv', index=False)
+        train_df.to_csv(f'{save_dir}train_fold_{fold}{country_suffix}{cleaned_suffix}.csv', index=False)
+        test_df.to_csv(f'{save_dir}test_fold_{fold}{country_suffix}{cleaned_suffix}.csv', index=False)
         
         fold += 1
 
@@ -1189,6 +1190,7 @@ def main():
     parser = argparse.ArgumentParser(description="Process DHS data to a single CSV file.")
     parser.add_argument("dhs_data_dir", help="The parent directory enclosing all DHS folders")
     parser.add_argument("--country", help="Two-letter country code (e.g., ET, KE)")
+    parser.add_argument("--cleaned", action='store_true', help="Indicates if the data is cleaned during processing")
     args = parser.parse_args()
 
     if args.dhs_data_dir[-1] != '/':
@@ -1197,7 +1199,7 @@ def main():
     target_country = args.country.upper() if args.country else None
 
     # call the download function with the parsed arguments
-    process_dhs(args.dhs_data_dir, target_country)
+    process_dhs(args.dhs_data_dir, target_country, args.cleaned)
 
 
 if __name__ == "__main__":
