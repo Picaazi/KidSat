@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=eval_dino_spatial_sh_siren%a
+#SBATCH --job-name=eval_dino_spatial%a
 #SBATCH --partition=magma
 #SBATCH --account=math022462
 #SBATCH --nodes=1
@@ -8,8 +8,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=64G
 #SBATCH --time=4:00:00
-#SBATCH --output=logs/eval_dino_spatial_sh_siren%A_%a.out
-#SBATCH --error=logs/eval_dino_spatial_sh_siren%A_%a.err
+#SBATCH --output=logs/eval_dino_spatial%A_%a.out
+#SBATCH --error=logs/eval_dino_spatial%A_%a.err
 
 
 echo "Start time: $(date)"
@@ -26,11 +26,8 @@ python modelling/dino/evaluate.py \
     --mode spatial \
     --use_checkpoint \
     --grouped_bands 4 3 2 \
-    --use_location_features \
-    --use_location_encoder \
-    --coord_encoding_method sh_siren \
-    > results/dino_spatial/evaluation_sh_siren.log 2>&1
+    > results/dino_spatial/evaluation.log 2>&1
 
 
 echo "Job completed at: $(date)"
-echo "DINOv2 spatial evaluation sh_siren completed"
+echo "DINOv2 spatial evaluation completed"
