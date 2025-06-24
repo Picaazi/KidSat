@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=eval_dino_spatial_sh_cleaned%a
+#SBATCH --job-name=eval_dino_spatial_cleaned%a
 #SBATCH --partition=magma
 #SBATCH --account=math022462
 #SBATCH --nodes=1
@@ -8,8 +8,8 @@
 #SBATCH --gres=gpu:1
 #SBATCH --mem=64G
 #SBATCH --time=4:00:00
-#SBATCH --output=logs/eval_dino_spatial_sh_cleaned%A_%a.out
-#SBATCH --error=logs/eval_dino_spatial_sh_cleaned%A_%a.err
+#SBATCH --output=logs/eval_dino_spatial_cleaned%A_%a.out
+#SBATCH --error=logs/eval_dino_spatial_cleaned%A_%a.err
 
 
 echo "Start time: $(date)"
@@ -27,10 +27,8 @@ python modelling/dino/evaluate.py \
     --use_checkpoint \
     --grouped_bands 4 3 2 \
     --cleaned \
-    --use_location_features \
-    --coord_encoding_method spherical_harmonics \
-    > results/dino_spatial/evaluation_sh_cleaned.log 2>&1
+    > results/dino_spatial/evaluation_cleaned.log 2>&1
 
 
 echo "Job completed at: $(date)"
-echo "DINOv2 spatial evaluation_sh_cleaned completed"
+echo "DINOv2 spatial evaluation_cleaned completed"
