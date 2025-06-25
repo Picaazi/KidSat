@@ -195,9 +195,8 @@ def evaluate(
         
         # Also set eval_target appropriately
         if target == "":
-            eval_target = "deprived_sev"  # Use this for single target evaluation
+            eval_target = "deprived_sev" 
     else:
-        # Original logic for when not using checkpoint
         if target == "":
             eval_target = "deprived_sev"
             if enhanced_targets:
@@ -567,8 +566,8 @@ if __name__ == '__main__':
     parser.add_argument('--use_checkpoint', action='store_true', help='Whether to use checkpoint file. If not, use raw model.')
     parser.add_argument('--model_not_named_target', action='store_false', help='Whether the model name contains the target variable')
     parser.add_argument('--grouped_bands', nargs='+', type=int, help="List of grouped bands")
+
     parser.add_argument('--country', type=str, help='Two-letter country code for single country training (e.g., ET, KE)')
-    
     parser.add_argument('--enhanced_targets', action='store_true', help='Use enhanced fine-tuning targets (with hv025)')
     parser.add_argument('--use_location_features', action='store_true', help='Include location features')
     parser.add_argument('--use_location_encoder', action='store_true', help='Use LocationEncoder for coordinates')
