@@ -44,7 +44,7 @@ except ImportError:
 
 
 def prepare_location_features(df, fold, country=None, enhanced_targets=False,
-                              use_location_encoder=False, coord_encoding_method='spherical_harmonics'):
+                              use_location_encoder=False, coord_encoding_method='spherical_harmonics', cleaned=False):
     """
     UPDATED: Now supports SH + SIREN approach
     """
@@ -67,9 +67,10 @@ def prepare_location_features(df, fold, country=None, enhanced_targets=False,
         model_par_dir = "modelling/dino/model/"
         country_suffix = f'_{country.upper()}' if country else ''
         enhanced_suffix = f'_enhanced' if enhanced_targets else ''
+        cleaned_suffix = '_cleaned' if cleaned else ''
         
         # Look for SH + SIREN model
-        sh_siren_model_path = f"{model_par_dir}sh_siren_spatial_{fold}_best{country_suffix}{enhanced_suffix}.pth"
+        sh_siren_model_path = f"{model_par_dir}sh_siren_spatial_{fold}_best{country_suffix}{enhanced_suffix}{cleaned_suffix}.pth"
         
         if os.path.exists(sh_siren_model_path):
             try:
@@ -159,11 +160,13 @@ def evaluate(
     enhanced_targets=False,
     use_location_features=False, # Use Geo info 
     use_location_encoder=False,
-    coord_encoding_method='spherical_harmonics'
+    coord_encoding_method='spherical_harmonics',
+    cleaned=False, # Use cleaned data or not
 ):
     model_par_dir = "modelling/dino/model/"
     country_suffix = f'_{country.upper()}' if country else ''
     enhanced_suffix = f'_enhanced' if enhanced_targets else ''
+    cleaned_suffix = '_cleaned' if cleaned else ''
 
     # Build checkpoint filename (pth file) based on mode and target
     if use_checkpoint:
@@ -171,7 +174,7 @@ def evaluate(
         if mode == "temporal":
             checkpoint = f"{model_par_dir}{model_name}_temporal_best_{imagery_source}{named_target}{country_suffix}{enhanced_suffix}.pth"
         elif mode == "spatial":
-            checkpoint = f"{model_par_dir}{model_name}_{fold}_{grouped_bands}all_cluster_best_{imagery_source}{named_target}{country_suffix}{enhanced_suffix}.pth"
+            checkpoint = f"{model_par_dir}{model_name}_{fold}_{grouped_bands}all_cluster_best_{imagery_source}{named_target}{country_suffix}{enhanced_suffix}{cleaned_suffix}.pth"
         elif mode == "one_country":
             checkpoint = f"{model_par_dir}{model_name}_{fold}_one_country_best_{imagery_source}{named_target}{country_suffix}{enhanced_suffix}.pth"
         else:
@@ -195,8 +198,9 @@ def evaluate(
         
         # Also set eval_target appropriately
         if target == "":
-            eval_target = "deprived_sev" 
+            eval_target = "deprived_sev"  # Use this for single target evaluation
     else:
+        # Original logic for when not using checkpoint
         if target == "":
             eval_target = "deprived_sev"
             if enhanced_targets:
@@ -229,8 +233,8 @@ def evaluate(
         train_df = pd.read_csv(f"{data_folder}before_2020.csv")
         test_df = pd.read_csv(f"{data_folder}after_2020.csv")
     else:
-        train_df = pd.read_csv(f"{data_folder}train_fold_{fold}{country_suffix}.csv")
-        test_df = pd.read_csv(f"{data_folder}test_fold_{fold}{country_suffix}.csv")
+        train_df = pd.read_csv(f"{data_folder}train_fold_{fold}{country_suffix}{cleaned_suffix}.csv")
+        test_df = pd.read_csv(f"{data_folder}test_fold_{fold}{country_suffix}{cleaned_suffix}.csv")
 
     
     # Filter out imagery files that match the source type (L or S)
@@ -268,11 +272,11 @@ def evaluate(
     if use_location_features:
         print("Preparing training location features...")
         train_location_features, feature_names = prepare_location_features(train_df, fold, country, enhanced_targets,
-            use_location_encoder, coord_encoding_method)
+            use_location_encoder, coord_encoding_method, cleaned)
         
         print("Preparing test location features...")
         test_location_features, _ = prepare_location_features(test_df, fold, country, enhanced_targets,
-            use_location_encoder, coord_encoding_method)
+            use_location_encoder, coord_encoding_method, cleaned)
     else:
         train_location_features = None
         test_location_features = None
@@ -409,7 +413,9 @@ def evaluate(
         f"{'_sh' if coord_encoding_method == 'spherical_harmonics' else ''}"
         f"{'_sh_siren' if coord_encoding_method == 'sh_siren' else ''}"
         f"{'_enh' if enhanced_targets else ''}"
-        f"{country_suffix}/"
+        f"{country_suffix}"
+        f"{cleaned_suffix if cleaned else ''}"
+        f"/"
     )
     if not os.path.exists(results_folder):
         os.makedirs(results_folder)
@@ -566,13 +572,14 @@ if __name__ == '__main__':
     parser.add_argument('--use_checkpoint', action='store_true', help='Whether to use checkpoint file. If not, use raw model.')
     parser.add_argument('--model_not_named_target', action='store_false', help='Whether the model name contains the target variable')
     parser.add_argument('--grouped_bands', nargs='+', type=int, help="List of grouped bands")
-
     parser.add_argument('--country', type=str, help='Two-letter country code for single country training (e.g., ET, KE)')
+    
     parser.add_argument('--enhanced_targets', action='store_true', help='Use enhanced fine-tuning targets (with hv025)')
     parser.add_argument('--use_location_features', action='store_true', help='Include location features')
     parser.add_argument('--use_location_encoder', action='store_true', help='Use LocationEncoder for coordinates')
     parser.add_argument('--coord_encoding_method', type=str, default='spherical_harmonics', 
                        choices=['spherical_harmonics', 'sh_siren'], help='Coordinate encoding method')
+    parser.add_argument('--cleaned', action='store_true', help='Use cleaned data or not')
     
     args = parser.parse_args()
     maes = []
@@ -585,7 +592,7 @@ if __name__ == '__main__':
                 str(fold), args.model_name, args.target, args.use_checkpoint, args.model_not_named_target,
                 args.imagery_path, args.imagery_source, args.mode, args.model_output_dim, 
                 args.grouped_bands, args.country, args.enhanced_targets, args.use_location_features,
-                args.use_location_encoder, args.coord_encoding_method, 
+                args.use_location_encoder, args.coord_encoding_method, args.cleaned
             )
             maes.append(mae)
         

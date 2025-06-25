@@ -7,7 +7,11 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
 #SBATCH --mem=64G
+<<<<<<< HEAD
 #SBATCH --time=96:00:00
+=======
+#SBATCH --time=24:00:00
+>>>>>>> joshua_testing
 #SBATCH --array=1-5  # Repository uses folds 1-5, not 0-4
 #SBATCH --output=logs/train_dino_spatial_TZ%A_%a.out
 #SBATCH --error=logs/train_dino_spatial_TZ%A_%a.err
@@ -30,8 +34,13 @@ python modelling/dino/finetune_spatial.py \
     --imagery_path data/imagery \
     --imagery_source L \
     --batch_size 8 \
+<<<<<<< HEAD
     --num_epochs 20 
 
+=======
+    --num_epochs 20 \
+    --cleaned
+>>>>>>> joshua_testing
 
 echo "Job completed at: $(date)"
 echo "DINOv2 spatial training fold $SLURM_ARRAY_TASK_ID completed"

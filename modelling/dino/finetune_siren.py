@@ -48,7 +48,11 @@ class SirenSHDataset(Dataset):
     
 
 def main(fold, target, imagery_path, imagery_source, representation_dim, hidden_dim, 
+<<<<<<< HEAD
          num_layers, batch_size, num_epochs, country=None, enhanced_targets=False, sh_L=15):
+=======
+         num_layers, batch_size, num_epochs, country=None, enhanced_targets=False, sh_L=15, cleaned=False):
+>>>>>>> joshua_testing
     
     print(f"Starting SH + Siren training for fold {fold}")
     print(f"Imagery source: {imagery_source} (used for dataset filtering)")
@@ -58,6 +62,7 @@ def main(fold, target, imagery_path, imagery_source, representation_dim, hidden_
     data_folder = r'survey_processing/processed_data'
     country_suffix = f'_{country.upper()}' if country else ''
     enhanced_suffix = f'_enhanced' if enhanced_targets else ''
+<<<<<<< HEAD
     
     # Load data
     train_df = pd.read_csv(f'{data_folder}/train_fold_{fold}{country_suffix}.csv')
@@ -66,6 +71,17 @@ def main(fold, target, imagery_path, imagery_source, representation_dim, hidden_
     # Model paths - using sh_siren prefix to distinguish from regular siren
     best_model = f'modelling/dino/model/sh_siren_spatial_{fold}_best{country_suffix}{enhanced_suffix}.pth'
     last_model = f'modelling/dino/model/sh_siren_spatial_{fold}_last{country_suffix}{enhanced_suffix}.pth'
+=======
+    cleaned_suffix = '_cleaned' if cleaned else ''
+    
+    # Load data
+    train_df = pd.read_csv(f'{data_folder}/train_fold_{fold}{country_suffix}{cleaned_suffix}.csv')
+    test_df = pd.read_csv(f'{data_folder}/test_fold_{fold}{country_suffix}{cleaned_suffix}.csv')
+    
+    # Model paths - using sh_siren prefix to distinguish from regular siren
+    best_model = f'modelling/dino/model/sh_siren_spatial_{fold}_best{country_suffix}{enhanced_suffix}{cleaned_suffix}.pth'
+    last_model = f'modelling/dino/model/sh_siren_spatial_{fold}_last{country_suffix}{enhanced_suffix}{cleaned_suffix}.pth'
+>>>>>>> joshua_testing
     
     print(f"Model files:")
     print(f"  Best: {best_model}")
@@ -304,6 +320,10 @@ if __name__ == '__main__':
     parser.add_argument('--country', type=str, help='Two-letter country code for single country training (e.g., ET, KE)')
     parser.add_argument('--enhanced_targets', action='store_true', help='Include hv025 in fine-tuning targets')
     parser.add_argument('--sh_L', type=int, default=15, help='Spherical harmonics degree (L parameter)')
+<<<<<<< HEAD
+=======
+    parser.add_argument('--cleaned', action='store_true', help='Indicates if the data is cleaned during processing')
+>>>>>>> joshua_testing
 
     args = parser.parse_args()
 
@@ -315,4 +335,8 @@ if __name__ == '__main__':
         
     main(args.fold, args.target, args.imagery_path, args.imagery_source, args.representation_dim, 
          args.hidden_dim, args.num_layers, args.batch_size, args.num_epochs, args.country, 
+<<<<<<< HEAD
          args.enhanced_targets, args.sh_L)
+=======
+         args.enhanced_targets, args.sh_L, args.cleaned)
+>>>>>>> joshua_testing

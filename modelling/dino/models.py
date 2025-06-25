@@ -3,6 +3,7 @@ import torch.nn as nn
 import numpy as np
 from scipy.special import sph_harm
 from torch.utils.data import Dataset
+import math
 import warnings
 warnings.filterwarnings('ignore')
 import os
@@ -99,6 +100,83 @@ class ViTForRegressionWithUncertainty(nn.Module):
             
             return mean, variance
         
+'''
+class SphericalHarmonicsEncoder:
+    """
+    Spherical Harmonics encoder following Russwurm & Korner (2023) implementation
+    """
+    def __init__(self, L=15):
+        self.L = L
+        self.output_dim = (L + 1) ** 2  # Real-valued SH
+        print(f"SH Encoder: L={L}, output_dim={self.output_dim}")
+    
+    def associated_legendre_polynomial(self, l, m, x):
+        """Associated Legendre polynomial implementation"""
+        pmm = torch.ones_like(x)
+        if m > 0:
+            somx2 = torch.sqrt((1 - x) * (1 + x))
+            fact = 1.0
+            for i in range(1, m + 1):
+                pmm = pmm * (-fact) * somx2
+                fact += 2.0
+        if l == m:
+            return pmm
+        pmmp1 = x * (2.0 * m + 1.0) * pmm
+        if l == m + 1:
+            return pmmp1
+        pll = torch.zeros_like(x)
+        for ll in range(m + 2, l + 1):
+            pll = ((2.0 * ll - 1.0) * x * pmmp1 - (ll + m - 1.0) * pmm) / (ll - m)
+            pmm = pmmp1
+            pmmp1 = pll
+        return pll
+    
+    def SH_renormalization(self, l, m):
+        """Spherical harmonics normalization factor"""
+        return math.sqrt((2.0 * l + 1.0) * math.factorial(l - abs(m)) / \
+            (4 * math.pi * math.factorial(l + abs(m))))
+    
+    def SH(self, m, l, phi, theta):
+        """Compute spherical harmonics following Russwurm & Korner implementation"""
+        if m == 0:
+            return self.SH_renormalization(l, m) * \
+                   self.associated_legendre_polynomial(l, m, torch.cos(theta))
+        elif m > 0:
+            return math.sqrt(2.0) * self.SH_renormalization(l, m) * \
+                   torch.cos(m * phi) * self.associated_legendre_polynomial(l, m, torch.cos(theta))
+        else:
+            return math.sqrt(2.0) * self.SH_renormalization(l, -m) * \
+                   torch.sin(-m * phi) * self.associated_legendre_polynomial(l, -m, torch.cos(theta))
+    
+    def encode_coordinates(self, lat, lon):
+        """
+        Encode lat/lon using spherical harmonics (Russwurm & Korner implementation)
+        Returns: numpy array of shape (n_samples, output_dim)
+        """
+        # Convert to torch tensors
+        lat = torch.tensor(lat, dtype=torch.float32)
+        lon = torch.tensor(lon, dtype=torch.float32)
+        
+        # Convert to spherical coordinates
+        theta = torch.deg2rad(90 - lat)  # Colatitude
+        phi = torch.deg2rad(lon)         # Azimuth
+        
+        harmonics_features = []
+        
+        for l in range(self.L + 1):
+            for m in range(-l, l + 1):
+                sh_value = self.SH(m, l, phi, theta)
+                harmonics_features.append(sh_value.numpy())
+        
+        # Stack features: (output_dim, n_samples) -> (n_samples, output_dim)
+        features_array = np.stack(harmonics_features, axis=1)
+        
+        # Handle any numerical issues
+        features_array = np.nan_to_num(features_array, nan=0.0, posinf=0.0, neginf=0.0)
+        
+        return features_array
+
+'''    
 class SphericalHarmonicsEncoder:
     """
     Spherical Harmonics encoder for coordinates
@@ -150,12 +228,14 @@ class SphericalHarmonicsEncoder:
         features_array = np.nan_to_num(features_array, nan=0.0, posinf=0.0, neginf=0.0)
         
         return features_array
-    
+
+
 class PovertySirenSH(nn.Module):
     """
     Enhanced Siren network with Spherical Harmonics preprocessing
     Input: (lat, lon) coordinates → SH features → SIREN → poverty prediction
     """
+
     def __init__(self, sh_L=15, hidden_dim=256, num_layers=4,
                  representation_dim=128, omega_0=30.0):
         super().__init__()

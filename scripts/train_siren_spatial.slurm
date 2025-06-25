@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=train_sh_siren_spatial%a
+#SBATCH --job-name=train_sh_siren_spatial_TZ%a
 #SBATCH --partition=magma
 #SBATCH --account=math022462
 #SBATCH --nodes=1
@@ -7,10 +7,10 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
 #SBATCH --mem=64G
-#SBATCH --time=96:00:00
+#SBATCH --time=24:00:00
 #SBATCH --array=1-5  # Repository uses folds 1-5, not 0-4
-#SBATCH --output=logs/train_sh_siren_spatial%A_%a.out
-#SBATCH --error=logs/train_sh_siren_spatial%A_%a.err
+#SBATCH --output=logs/train_sh_siren_spatial_TZ%A_%a.out
+#SBATCH --error=logs/train_sh_siren_spatial_TZ%A_%a.err
 
 echo "Start time: $(date)"
 
@@ -33,7 +33,8 @@ python modelling/dino/finetune_siren.py \
     --num_layers 4 \
     --batch_size 32 \
     --num_epochs 200 \
-    --sh_L 15 
+    --sh_L 15 \
+    --cleaned
 
 echo "Job completed at: $(date)"
 echo "Siren spatial training fold $SLURM_ARRAY_TASK_ID completed"
