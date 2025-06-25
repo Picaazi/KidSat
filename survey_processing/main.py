@@ -51,11 +51,7 @@ with open(cc_file, 'r') as file:
     dhs_cc = json.load(file)
 
 
-<<<<<<< HEAD
-def process_dhs(dhs_data_dir):
-=======
 def process_dhs(dhs_data_dir, target_country=None, cleaned=False):
->>>>>>> joshua_testing
     """
     Creates DHS DataFrames and Poverty DataFrames containing poverty deprivation indicators.
     Aggregates these DataFrames to the cluster level and joins these DataFrames with the GPS data.
@@ -74,19 +70,11 @@ def process_dhs(dhs_data_dir, target_country=None, cleaned=False):
         raise FileNotFoundError('DHS data incomplete')
 
     # create DataFrames storing dhs data, and if possible create DataFrames with poverty deprivation indicators
-<<<<<<< HEAD
-    dhs_dfs, pov_dfs = get_dhs_and_pov_dfs(dhs_data_dir)
-=======
     dhs_dfs, pov_dfs = get_dhs_and_pov_dfs(dhs_data_dir, target_country)
->>>>>>> joshua_testing
                 
     # aggregate to the cluster level
     dhs_df_all = agg_dhs_dfs(dhs_dfs)
     pov_df_all = agg_pov_dfs(pov_dfs)
-<<<<<<< HEAD
-    centroid_df = get_geo_data(dhs_data_dir)
-    
-=======
     centroid_df = get_geo_data(dhs_data_dir, target_country)
     
     """Joshua: we have to replace some of the project from centroid to correct year in dhs_df_all"""
@@ -94,19 +82,14 @@ def process_dhs(dhs_data_dir, target_country=None, cleaned=False):
     centroid_df["CENTROID_ID"] = centroid_df["CENTROID_ID"].str.replace(r"^RW2008", "RW2007", regex=True)
     centroid_df["CENTROID_ID"] = centroid_df["CENTROID_ID"].str.replace(r"^ZA2017", "ZA2016", regex=True)
 
->>>>>>> joshua_testing
     # merge dhs, poverty data and GPS data on centroid ID/id
     merged_centroid_df = pd.merge(centroid_df, pov_df_all, left_on='CENTROID_ID', right_on='id', how='left')
     merged_centroid_df = pd.merge(merged_centroid_df, dhs_df_all, left_on='CENTROID_ID', right_on='id', how='left')
 
     # remove some cols after join
     merged_centroid_df = merged_centroid_df.drop(["hhid", "indid", "id_x", "id_y", "year_interview"], axis=1)
-<<<<<<< HEAD
-
-=======
     merged_centroid_df["hv271"].min()
     merged_centroid_df["hv271"].max()
->>>>>>> joshua_testing
     # min/max scale cols
     df_processed = min_max_scale(merged_centroid_df)
 
@@ -118,17 +101,10 @@ def process_dhs(dhs_data_dir, target_country=None, cleaned=False):
     df_processed[matching_columns] = df_processed[matching_columns].fillna(0)
     
     # save dataframe and train/test splits
-<<<<<<< HEAD
-    save_split(df_processed, save_processed_dir)
-
-
-def get_dhs_and_pov_dfs(dhs_data_dir):
-=======
     save_split(df_processed, save_processed_dir, target_country, cleaned)
 
 
 def get_dhs_and_pov_dfs(dhs_data_dir, target_country=None):
->>>>>>> joshua_testing
     """
     Iterate through the DHS data.
     For each survey for a certain country and year, generate a DataFrame of DHS data.
@@ -148,13 +124,10 @@ def get_dhs_and_pov_dfs(dhs_data_dir, target_country=None):
     print('Creating DHS and Poverty DataFrames...')
     for f in tqdm(os.listdir(dhs_data_dir)):
         if 'DHS' in f:
-<<<<<<< HEAD
-=======
             # Filter by country if specified
             if target_country and not f.startswith(target_country):
                 continue
 
->>>>>>> joshua_testing
             dhs_df, create_pov_df_flag = create_dhs_dataframe(dhs_data_dir + f + '/')
             dhs_dfs.append(dhs_df)
             if create_pov_df_flag:
@@ -575,11 +548,8 @@ def get_water_depr(df):
     mask_mod = (df['dep_water_mod'] == 0) & (~df['hv201'].isin([32, 42, 43, 96])) & (df['hv204'] > 30) & (df['hv204'] <= 900)
     df.loc[mask_mod, 'dep_water_mod'] = 1
 
-<<<<<<< HEAD
-=======
     "Here we would replace the value of variable hv204 to zero in case if the response is 996, i.e its on premises"
     df['hv204'] = df['hv204'].replace(996, 0)
->>>>>>> joshua_testing
     return df
 
 
@@ -697,15 +667,10 @@ def get_health_depr(df):
     df.loc[age_filter & need_filter & (df['v312'] == 99), 'contramethodseverelydep'] = pd.NA  # Handling missing data as NaN
 
     # Moderate (+ severe) deprivation: Includes girls using traditional methods of contraception
-<<<<<<< HEAD
-    df['contramethodmoderatedep'] = 0  # Initialize column
-    traditional_methods = [8, 9, 10]  # Assuming these codes indicate traditional methods
-=======
     traditional_methods = [8, 9, 10]  # Assuming these codes indicate traditional methods
     df['contramethodmoderatedep'] = 0  # Initialize column
     """Joshua: I would merge v312_8 v312_9 and v312_10 to v312_trad here"""
     df['v312_trad'] = df['v312'].isin([8, 9, 10])
->>>>>>> joshua_testing
     df.loc[age_filter & need_filter & (df['v312'].isin([0] + traditional_methods)), 'contramethodmoderatedep'] = 1
     df.loc[age_filter & need_filter & (df['v312'] == 99), 'contramethodmoderatedep'] = pd.NA  # Handling missing data as NaN
 
@@ -898,10 +863,6 @@ def agg_dhs_dfs(dhs_dfs):
     """
 
     # we will remove rows if variables are above these thresholds
-<<<<<<< HEAD
-    thresholds = config_data['thresholds']
-
-=======
     """Joshua: here we will change the thresholds - 
     1. remove the orphanhood indicators hv111 and hv113,
     2. changing hv271 to 500000, as it's acceptable to have range up to 1e6 
@@ -928,7 +889,6 @@ def agg_dhs_dfs(dhs_dfs):
         "hv271": 500000,  #this is changed
         "v312": 20,
     }
->>>>>>> joshua_testing
     # categorical columns to one hot encode
     columns_to_encode = config_data['categorical']
 
@@ -1020,11 +980,7 @@ def agg_pov_dfs(pov_dfs):
     return pov_df_all
 
 
-<<<<<<< HEAD
-def get_geo_data(dhs_data_dir):
-=======
 def get_geo_data(dhs_data_dir, target_country=None):
->>>>>>> joshua_testing
     """
     Iterate through the DHS data folder and extract the geographic data for each survey.
 
@@ -1039,13 +995,10 @@ def get_geo_data(dhs_data_dir, target_country=None):
     # iterate through all DHS surveys
     for f in os.listdir(dhs_data_dir):
         if 'DHS' in f:
-<<<<<<< HEAD
-=======
             # Filter by country if specified
             if target_country and not f.startswith(target_country):
                 continue
 
->>>>>>> joshua_testing
             # iterate through all sub files to find GPS data
             for sub_f in os.listdir(os.path.join(dhs_data_dir,f)):
                 if sub_f.__contains__('GE'):
@@ -1087,17 +1040,11 @@ def min_max_scale(df):
         df_processed (pd.DataFrame): Scaled DataFrame of merged DHS, poverty and geographic data.
     """
 
-<<<<<<< HEAD
-    # list of columns we don't want to scale
-    no_scale_cols = ["CENTROID_ID", "SURVEY_NAME", "COUNTRY", "YEAR",
-                    "LATNUM", "LONGNUM", "cluster"]
-=======
 
 
     # list of columns we don't want to scale
     no_scale_cols = ["CENTROID_ID", "SURVEY_NAME", "COUNTRY", "YEAR",
                     "LATNUM", "LONGNUM", "cluster", "hv001"]
->>>>>>> joshua_testing
     
     # drop these columns so then we scale a subset of the DataFrame
     df_subset = df.drop(no_scale_cols, axis=1)
@@ -1129,18 +1076,10 @@ def min_max_scale(df):
     # Save min-max dictionary locally
     with open(min_max_file, 'w') as f:
         json.dump(min_max_dict, f, indent=4)
-<<<<<<< HEAD
-
-    return df_processed
-
-
-def save_split(df, save_dir):
-=======
     return df_processed
 
 
 def save_split(df, save_dir, target_country=None, cleaned=False):
->>>>>>> joshua_testing
     """
     Given the fully processed merged DHS, poverty and geographic DataFrame,
     We first save this in the save directory,
@@ -1156,13 +1095,6 @@ def save_split(df, save_dir, target_country=None, cleaned=False):
         None
     """ 
     
-<<<<<<< HEAD
-    # save processed dataframe
-    df.to_csv(f'{save_dir}dhs_processed.csv', index=False)
-
-    # shuffle dataframe
-    df = df.sample(frac=1, random_state=42)
-=======
     # "Added by Joshua for temp testing"
     # essential_cols = ["v312_1", "hv001", "hv205_14", "hv201_31", "h3_3", "hv201_71", 
     #                   "v312_5", "v312_13", "hv201_45", "hv201_14", "hv007", "hv205_23", 
@@ -1211,21 +1143,10 @@ def save_split(df, save_dir, target_country=None, cleaned=False):
 
     # shuffle dataframe
     df_cleaned = df_cleaned.sample(frac=1, random_state=42)
->>>>>>> joshua_testing
 
     # split and save data into 5 train/test folds
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
     fold = 1
-<<<<<<< HEAD
-    for train_index, test_index in kf.split(df):
-        # Generate train and test subsets
-        train_df = df.iloc[train_index]
-        test_df = df.iloc[test_index]
-        
-        # Save to CSV files
-        train_df.to_csv(f'{save_dir}train_fold_{fold}.csv', index=False)
-        test_df.to_csv(f'{save_dir}test_fold_{fold}.csv', index=False)
-=======
     for train_index, test_index in kf.split(df_cleaned):
         # Generate train and test subsets
         train_df = df_cleaned.iloc[train_index]
@@ -1234,18 +1155,12 @@ def save_split(df, save_dir, target_country=None, cleaned=False):
         # Save to CSV files
         train_df.to_csv(f'{save_dir}train_fold_{fold}{country_suffix}{cleaned_suffix}.csv', index=False)
         test_df.to_csv(f'{save_dir}test_fold_{fold}{country_suffix}{cleaned_suffix}.csv', index=False)
->>>>>>> joshua_testing
         
         fold += 1
 
     # also save pre/post 2020 data
-<<<<<<< HEAD
-    old_df = df[df['YEAR'] < 2020]
-    new_df = df[df['YEAR'] >= 2020]
-=======
     old_df = df_cleaned[df_cleaned['YEAR'] < 2020]
     new_df = df_cleaned[df_cleaned['YEAR'] >= 2020]
->>>>>>> joshua_testing
     new_df.to_csv(f'{save_dir}after_2020.csv', index=False)
     old_df.to_csv(f'{save_dir}before_2020.csv', index=False)
 
@@ -1274,24 +1189,13 @@ def main():
     # Setup argument parser
     parser = argparse.ArgumentParser(description="Process DHS data to a single CSV file.")
     parser.add_argument("dhs_data_dir", help="The parent directory enclosing all DHS folders")
-<<<<<<< HEAD
-=======
     parser.add_argument("--country", help="Two-letter country code (e.g., ET, KE)")
     parser.add_argument("--cleaned", action='store_true', help="Indicates if the data is cleaned during processing")
->>>>>>> joshua_testing
     args = parser.parse_args()
 
     if args.dhs_data_dir[-1] != '/':
         args.dhs_data_dir += r'/'
 
-<<<<<<< HEAD
-    # call the download function with the parsed arguments
-    process_dhs(args.dhs_data_dir)
-
-
-if __name__ == "__main__":
-    main()
-=======
     target_country = args.country.upper() if args.country else None
 
     # call the download function with the parsed arguments
@@ -1300,4 +1204,3 @@ if __name__ == "__main__":
 
 if __name__ == "__main__":
     main()
->>>>>>> joshua_testing

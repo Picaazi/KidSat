@@ -60,6 +60,7 @@ python modelling/dino/evaluate.py \
     --use_checkpoint \
     --grouped_bands 4 3 2 \
     --cleaned \
+    --coord_encoding_method spherical_harmonics \
     > results/dino_spatial/evaluation_cleaned.log 2>&1
 
 

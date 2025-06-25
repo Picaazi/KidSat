@@ -21,12 +21,8 @@
     "PR_vars_to_keep" : [
         "hv000",
         "hv005", 
-<<<<<<< HEAD
-        "hv007", 
-=======
         "hv007",
         "hv025", 
->>>>>>> joshua_testing
         "hv111", 
         "hv113", 
         "hv009",
@@ -46,12 +42,7 @@
         "hc70",
         "hv001", 
         "hv002",
-<<<<<<< HEAD
-        "hvidx",
-        "hv025"
-=======
         "hvidx"
->>>>>>> joshua_testing
     ],
     "IR_vars_to_keep" : [
         "v626a",
@@ -93,13 +84,8 @@
         "hv106",
         "hv201",
         "hv205",
-<<<<<<< HEAD
-        "hv025",
-        "v312"
-=======
         "v312",
         "hv025"
->>>>>>> joshua_testing
     ],
     "dhs_vars_to_keep": [
         "b16",
@@ -139,12 +125,7 @@
         "v007",
         "v312",
         "hv111",
-<<<<<<< HEAD
-        "hv113",
-        "hv025"
-=======
         "hv113"
->>>>>>> joshua_testing
     ],
     "countries": [
         "ZM_2013",
