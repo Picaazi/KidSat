@@ -114,7 +114,8 @@ def set_seed(seed):
     random.seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    
+
+'''   
 class CustomDataset(Dataset):
     def __init__(self, dataframe, transform, normalization, predict_target, grouped_bands=[4, 3, 2], all = False):
         self.dataframe = dataframe
@@ -140,7 +141,56 @@ class CustomDataset(Dataset):
         # Assuming your target is a single scalar
         target = torch.tensor(item[self.predict_target], dtype=torch.float32)
         return image_tensor, target  # Adjust based on actual output of feature_extractor
+'''
 
+class CustomDataset(Dataset):
+    def __init__(self, dataframe, transform, normalization, predict_target, grouped_bands=None, all = False):
+        self.dataframe = dataframe
+        self.transform = transform
+        
+        self.normalization = normalization
+        self.predict_target = predict_target
+        self.grouped_bands = grouped_bands
+        self.all = all
+        
+    def __len__(self):
+        return len(self.dataframe)
+
+    def __getitem__(self, idx):
+        item = self.dataframe.iloc[idx]
+        path = item['imagery_path']
+        gb = [4,3,2]
+        gb_all = [4,3,2, 5,4,2,6,5,4]
+        if self.grouped_bands is None:
+            if "L7" in path or "L5" in path:
+                gb_all = [3,2,1,4,3,1,5,4,3]
+                gb = [3, 2, 1] 
+            elif "L8" in path or "S2" in path:
+                gb_all = [4,3,2, 5,4,2,6,5,4]
+                gb = [4, 3, 2]
+            else:
+                print("No satilite found, idk what band to use")
+        else:
+            gb = self.grouped_bands
+            
+        if self.all:
+            image = load_and_preprocess_image_all(path, self.normalization, gb_all)
+            
+            # Apply feature extractor if necessary, might need adjustments
+            image_tensor = self.transform(image)
+            
+            # Assuming your target is a single scalar
+            target = torch.tensor(item[self.predict_target], dtype=torch.float32)
+        else:
+            image = load_and_preprocess_image(path, self.normalization, gb)
+            # Apply feature extractor if necessary, might need adjustments
+            image_tensor = self.transform(Image.fromarray(image))
+        
+            # Assuming your target is a single scalar                                                                                                                                                                                                                                                                                                                                                                                                      
+            target = torch.tensor(item[self.predict_target], dtype=torch.float32)
+        return image_tensor, target  # Adjust based on actual output of feature_extractor
+
+        
 # Function to save model checkpoints
 def save_checkpoint(model, optimizer, epoch, loss, filename="checkpoint.pth"):
     torch.save({

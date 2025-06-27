@@ -86,6 +86,11 @@ def process_dhs(dhs_data_dir, target_country=None, cleaned=False):
     merged_centroid_df = pd.merge(centroid_df, pov_df_all, left_on='CENTROID_ID', right_on='id', how='left')
     merged_centroid_df = pd.merge(merged_centroid_df, dhs_df_all, left_on='CENTROID_ID', right_on='id', how='left')
 
+    merged_centroid_df["CENTROID_ID"] = merged_centroid_df["CENTROID_ID"].str.replace(r"^ET2011", "ET2010", regex=True)
+    merged_centroid_df["CENTROID_ID"] = merged_centroid_df["CENTROID_ID"].str.replace(r"^RW2007", "RW2008", regex=True)
+    merged_centroid_df["CENTROID_ID"] = merged_centroid_df["CENTROID_ID"].str.replace(r"^ZA2016", "ZA2017", regex=True)
+
+
     # remove some cols after join
     merged_centroid_df = merged_centroid_df.drop(["hhid", "indid", "id_x", "id_y", "year_interview"], axis=1)
     merged_centroid_df["hv271"].min()
@@ -1095,32 +1100,12 @@ def save_split(df, save_dir, target_country=None, cleaned=False):
         None
     """ 
     
-    # "Added by Joshua for temp testing"
-    # essential_cols = ["v312_1", "hv001", "hv205_14", "hv201_31", "h3_3", "hv201_71", 
-    #                   "v312_5", "v312_13", "hv201_45", "hv201_14", "hv007", "hv205_23", 
-    #                   "hv205_24", "hv205_31", "hv201_33", "v312_16", "v312_11", "hv205_27", 
-    #                   "hv121_1", "h7_0", "h7_1", "hv005", "v312_3", "hv201_23", 
-    #                   "hv205_12", "hv201_62", "hv201_46", "hv201_13", "hv109_3", "h10_0", 
-    #                   "v312_2", "v312_6",  "b19", "hv271", "h9_8", "hv201_32", 
-    #                   "hv205_13", "hv270", "hv009", "hv201_44", "hv109_4", "hv201_36", 
-    #                   "hv205_22", "hv216", "h9_0", "hv201_22", "hv201_35", "h9_1", 
-    #                   "hc70", "hv204", "hv205_28", "hv201_25", "h5_0", "h31_0", 
-    #                   "v005", "h31_2", "v312_9", "h9_2", "hv201_21", "v312_0", 
-    #                   "h5_3", "hv205_41", "hv109_5", "v312_10", "hv111", "hv201_11", 
-    #                   "hv201_12", "h3_2", "h7_3", "h5_2", "hv205_29", "v312_14", 
-    #                   "hv201_41", "h5_1", "hv109_1", "hv121_2", "hv121_0", "h3_1", 
-    #                   "hv113", "hv109_0", "hv201_42", "hv201_61", "hv201_24", "h7_2", 
-    #                   "hv225", "h9_3", "h9_9", "hv205_42", "hv105", "hv201_34", 
-    #                   "hv201_51", "v312_18", "hv205_19", "hv122",  "hv205_15", "hv205_17", 
-    #                   "hv201_43", "hv205_21", "v312_8", "h3_0", "hv002", "hv104", 
-    #                   "hv205_43", "h10_1", "hv201_63", "hv024", "hv205_25", "hv109_2", 
-    #                   "hv205_11", "hv205_16", "v312_17", "hv205_18", "hv205_26"]
- 
-    # # Drop rows where all these columns are NaN
-    # df = df[~df[essential_cols].isnull().all(axis=1)]
- 
-    # # Drop rows where all these columns are zero (after scaling, they'll be in [0,1])
-    # df = df[~(df[essential_cols].sum(axis=1) == 0)]
+    # we will drop clusters that all data within the row is zero, we will check that by essential columns    
+    essential_cols = ["hv001", "hv002","hc70"]
+
+    new_df = df[~(df[essential_cols].fillna(0).sum(axis=1) == 0)]
+    print(f"{len(df)-len(new_df)} rows of null dhs values has been deleted")
+    df = new_df
     
     """Joshua: Here is the test on reducing the variables with very limited entries within each columns
         aiming to reduce from 99 variables to around 70 variables
