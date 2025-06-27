@@ -177,6 +177,7 @@ archive/
 *.pdf
 *.svg
 *.png
+*.PNG
 *json
 submit_*
 config*
@@ -199,4 +200,8 @@ logs/
 .DS_Store
 .dependencies_installed
 survey_processing/dhs_data/*
+<<<<<<< HEAD
+modelling/dino/zaf_adm_sadb_ocha_20201109_SHP/*
+=======
+>>>>>>> joshua_testing
 
