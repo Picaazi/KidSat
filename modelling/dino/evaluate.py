@@ -60,7 +60,7 @@ def prepare_location_features(df, fold, country=None, enhanced_targets=False,
     lon = df['LONGNUM'].values
 
     if coord_encoding_method == 'sh_siren':
-        # NEW: Use SH + SIREN approach
+        # Use SH + SIREN approach
         print("Using SH + Fine-tuned SIREN method")
         
         model_par_dir = "modelling/dino/model/"
@@ -187,6 +187,14 @@ def evaluate(
     print(f"Checkpoint: {checkpoint if use_checkpoint else 'None'}")
 
 
+    if target == "":
+        eval_target = "deprived_sev"
+        target_size = 101 if enhanced_targets else 99
+    else:
+        eval_target = target
+        target_size = 1 if model_not_named_target else 99
+
+
     # Modified to adjust the actual number of features/column (target size) of the country-wise model
     if use_checkpoint and os.path.exists(checkpoint):
         # Load checkpoint to get the actual target size
@@ -194,21 +202,8 @@ def evaluate(
         actual_target_size = temp_state['model_state_dict']['regression_head.weight'].shape[0]
         target_size = actual_target_size
         print(f"Detected target size from checkpoint: {target_size}")
-        
-        # Also set eval_target appropriately
-        if target == "":
-            eval_target = "deprived_sev"  # Use this for single target evaluation
-    else:
-        # Original logic for when not using checkpoint
-        if target == "":
-            eval_target = "deprived_sev"
-            if enhanced_targets:
-                target_size = 101
-            else:
-                target_size = 99
-        else:
-            eval_target = target
-            target_size = 1 if model_not_named_target else 99
+
+
 
     # Determine size of target
     '''
@@ -259,9 +254,11 @@ def evaluate(
                 return item
 
     train_df["imagery_path"] = train_df["CENTROID_ID"].apply(filter_contains)
-    train_df = train_df[train_df["deprived_sev"].notna()]
+    # train_df = train_df[train_df["deprived_sev"].notna()]
+    train_df = train_df[train_df[eval_target].notna()]
     test_df["imagery_path"] = test_df["CENTROID_ID"].apply(filter_contains)
-    test_df = test_df[test_df["deprived_sev"].notna()]
+    # test_df = test_df[test_df["deprived_sev"].notna()]
+    test_df = test_df[test_df[eval_target].notna()]
 
     # Reset indices after all filtering is complete
     train_df = train_df.reset_index(drop=True)
@@ -283,8 +280,17 @@ def evaluate(
         print("Not using location features")
 
     # Load image files and preprocess (stack bands, normalize, clip)
-    def load_and_preprocess_image(path):
+    def load_and_preprocess_image(path, grouped_bands=None):
         with rasterio.open(path) as src:
+            # Infer bands if not provided
+            if grouped_bands is None:
+                if "L7" in path or "L5" in path:
+                    grouped_bands = [3, 2, 1]
+                elif "L8" in path or "S2" in path:
+                    grouped_bands = [4, 3, 2]
+                else:
+                    raise ValueError(f"Cannot infer bands for {path}. Please provide grouped_bands.")
+
             r = src.read(grouped_bands[0])
             g = src.read(grouped_bands[1])
             b = src.read(grouped_bands[2])
@@ -335,7 +341,7 @@ def evaluate(
 
         def __getitem__(self, idx):
             item = self.dataframe.iloc[idx]
-            image = load_and_preprocess_image(item["imagery_path"])
+            image = load_and_preprocess_image(item["imagery_path"], grouped_bands)
             image_tensor = self.transform(Image.fromarray(image))
             return image_tensor, item[eval_target]
 
