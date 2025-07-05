@@ -10,7 +10,7 @@ Based on our proposed framework, we explored several methods to improve fine-tun
 3. **SIREN Network Integration:** Optional learnable spatial feature representation  
 4. **Advanced Regression Heads:** Non-linear models for final prediction
 
-**Main Result:** Our best configuration (improved data processing + Spherical Harmonics encoding + LightGBM regression head) achieved a **$15.8\%$ reduction in MAE** compared to the original pipeline.
+**Main Result:** Our best configuration (improved data processing + Spherical Harmonics encoding + LightGBM regression head) achieved a **15.8% reduction in MAE** compared to the original pipeline.
 
 ## Architecture Overview
 ![Model Diagram](attachments/flowchart.png)
@@ -33,7 +33,7 @@ Our improved data processing pipeline includes:
 - Dimensionality reduction from 99 to 74 features by combining rarely used indicators  
 - Removal of country-specific columns that introduced noise  
 - Inclusion of previously excluded data points within acceptable thresholds  
-- $\sim 10\%$ increase in usable training data  
+- ~10% increase in usable training data  
 
 ### 2. Spatial Encoding with Spherical Harmonics
 We implement Spherical Harmonics (SH) encoding to embed geographic information directly into the model pipeline:  
@@ -46,7 +46,7 @@ azimuth = lon * π/180
 # Yields 512-dimensional real-valued feature vector
 ```
 
-**Optional SIREN Network Finetuning**: By default, A 4-layer network (256 neurons each) with sinusoidal activations can learn complex location-specific relationships, mapping SH vectors to 128-dimentional learned geographic embeddings.
+**Optional SIREN Network Finetuning**: By default, a 4-layer network (256 neurons each) with sinusoidal activations can learn complex location-specific relationships, mapping SH vectors to 128-dimentional learned geographic embeddings.
 
 ### 3. Enhanced Regression Heads
 Instead of simple Ridge regression, we evaluate several non-linear regression methods:  
@@ -82,7 +82,22 @@ python finetune_spatial.py \
     --num_epochs 20 \
     --cleaned
 ```
-#### Option B: SH + SIREN (Two-stage training - Best Performance)
+
+#### Option B: SH only (Best Performance - Recommended)
+Standard DINOv2 fine-tuning with Spherical Harmonics encoding applied during evaluation:
+```bash
+python finetune_spatial.py \
+    --fold 1 \
+    --model_name dinov2_vitb14 \
+    --imagery_path {path_to_imagery_folder} \
+    --batch_size 8 \
+    --imagery_source L \
+    --num_epochs 20 \
+    --cleaned
+```
+*Note: The SH encoding is added during evaluation phase, providing the best performance with no additional training complexity*
+
+#### Option C: SH + SIREN (Two-stage training)
 **Stage 1:** Pre-train SIREN network on geographic coordinates:
 ```bash
 python finetune_siren.py \
