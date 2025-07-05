@@ -176,8 +176,7 @@ archive/
 *.csv
 *.pdf
 *.svg
-*.png
-*.PNG
+#*.png
 *json
 submit_*
 config*
