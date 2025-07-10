@@ -11,6 +11,9 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from models import SphericalHarmonicsEncoder, PovertySirenSH, load_sh_siren_model, extract_sh_siren_features
 from torch.utils.data import Dataset, DataLoader
+
+import torch.optim as optim
+
 import warnings
 
 warnings.filterwarnings("ignore")
@@ -40,6 +43,7 @@ except ImportError:
 # mode: evaluation type (temporal/spatial/one_country)
 # model_output_dim: output feature size of model
 # grouped_bands: which RGB bands to use for input image
+
 
 
 def prepare_location_features(df, fold, country=None, enhanced_targets=False,
@@ -162,6 +166,7 @@ def evaluate(
     coord_encoding_method='spherical_harmonics',
     cleaned=False, # Use cleaned data or not
 ):
+
     model_par_dir = "modelling/dino/model/"
     country_suffix = f'_{country.upper()}' if country else ''
     enhanced_suffix = f'_enhanced' if enhanced_targets else ''
@@ -294,6 +299,7 @@ def evaluate(
             r = src.read(grouped_bands[0])
             g = src.read(grouped_bands[1])
             b = src.read(grouped_bands[2])
+
             img = np.dstack((r, g, b))
             img = img / normalization * 255.0
         img = np.nan_to_num(img, nan=0, posinf=255, neginf=0)
@@ -372,6 +378,7 @@ def evaluate(
 
     # Extract features from base model for test data
     X_test_visual, y_test = [], []
+
     for images, targets in tqdm(val_loader):
         images, targets = images.to(device), targets.to(device)
         with torch.no_grad():
@@ -422,9 +429,10 @@ def evaluate(
         f"{cleaned_suffix if cleaned else ''}"
         f"/"
     )
+    
     if not os.path.exists(results_folder):
         os.makedirs(results_folder)
-
+        
     # Save all feature sets
     pd.DataFrame(X_train).to_csv(f"{results_folder}X_train_combined.csv", index=False)
     pd.DataFrame(X_test).to_csv(f"{results_folder}X_test_combined.csv", index=False)
@@ -435,6 +443,7 @@ def evaluate(
         pd.DataFrame(train_location_features).to_csv(f"{results_folder}X_train_location.csv", index=False)
         pd.DataFrame(test_location_features).to_csv(f"{results_folder}X_test_location.csv", index=False)
         pd.DataFrame(feature_names, columns=['feature_name']).to_csv(f"{results_folder}feature_names.csv", index=False)
+
 
     # Ridge Regression with cross-validation to evaluate features
     alphas = np.logspace(-6, 6, 20)
@@ -562,6 +571,7 @@ def evaluate(
     print("Test Score (MAE):", final_test_score)
 
     return final_test_score
+
 
 
 

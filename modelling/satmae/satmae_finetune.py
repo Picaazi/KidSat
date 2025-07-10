@@ -41,25 +41,9 @@ def main(args):
     else:
         print("Tensorboard not available: not logging progress")
 
-    predict_target = [
-        "h10",
-        "h3",
-        "h31",
-        "h5",
-        "h7",
-        "h9",
-        "hc70",
-        "hv109",
-        "hv121",
-        "hv106",
-        "hv201",
-        "hv204",
-        "hv205",
-        "hv216",
-        "hv225",
-        "hv271",
-        "v312",
-    ]
+    predict_target = ["h10", "h3", "h31", "h5", "h7", "h9", 
+                    "hc70", "hv109", "hv121", "hv106", "hv201", 
+                    "hv204", "hv205", "hv216", "hv225", "hv271", "v312"]
     train_dataset, val_dataset, num_classes = get_datasets(
         args.dhs_path,
         args.imagery_path,

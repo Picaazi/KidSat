@@ -92,19 +92,23 @@ def load_and_preprocess_image(path, normalization, grouped_bands):
 
     return img
 
-def load_and_preprocess_image_all(path, normalization):
-        with rasterio.open(path) as src:
-            bands = src.read()
-            img = bands[:13]
-            img = img / normalization  # Normalize to [0, 1] (if required)
-        
-        img = np.nan_to_num(img, nan=0, posinf=1, neginf=0)
-        img = np.clip(img, 0, 1)  # Clip values to be within the 0-1 range
-        img = np.transpose(img, (1, 2, 0))
-        # Scale back to [0, 255] for visualization purposes
-        img = (img * 255).astype(np.uint8)
+def load_and_preprocess_image_all(path, normalization, gb_all):
+    
+    
+    # input which band groups to use, then order them in the right order
+    with rasterio.open(path) as src:
+        bands = src.read()
+        img = bands[:13]
+        img = img / normalization  # Normalize to [0, 1] (if required)
+    gb_all = [i - 1 for i in gb_all]  # Adjust for zero-based indexing
+    img = img[gb_all, :, :]  # Select the bands based on the grouped_bands list
+    img = np.nan_to_num(img, nan=0, posinf=1, neginf=0)
+    img = np.clip(img, 0, 1)  # Clip values to be within the 0-1 range
+    img = np.transpose(img, (1, 2, 0))
+    # Scale back to [0, 255] for visualization purposes
+    img = (img * 255).astype(np.uint8)
 
-        return img
+    return img
 
 def set_seed(seed):
     torch.manual_seed(seed)
@@ -117,7 +121,7 @@ def set_seed(seed):
 
 '''   
 class CustomDataset(Dataset):
-    def __init__(self, dataframe, transform, normalization, predict_target, grouped_bands=[4, 3, 2], all = False):
+    def __init__(self, dataframe, transform, normalization, predict_target, grouped_bands=None, all = False):
         self.dataframe = dataframe
         self.transform = transform
         
@@ -131,15 +135,36 @@ class CustomDataset(Dataset):
 
     def __getitem__(self, idx):
         item = self.dataframe.iloc[idx]
-        if self.all:
-            image = load_and_preprocess_image_all(item['imagery_path'], self.normalization)
+        path = item['imagery_path']
+        gb = [4,3,2]
+        gb_all = [4,3,2, 5,4,2,6,5,4]
+        if self.grouped_bands is None:
+            if "L7" in path or "L5" in path:
+                gb_all = [3,2,1,4,3,1,5,4,3]
+                gb = [3, 2, 1] 
+            elif "L8" in path or "S2" in path:
+                gb_all = [4,3,2, 5,4,2,6,5,4]
+                gb = [4, 3, 2]
+            else:
+                print("No satilite found, idk what band to use")
         else:
-            image = load_and_preprocess_image(item['imagery_path'], self.normalization, self.grouped_bands)
-        # Apply feature extractor if necessary, might need adjustments
-        image_tensor = self.transform(Image.fromarray(image))
+            gb = self.grouped_bands
+            
+        if self.all:
+            image = load_and_preprocess_image_all(path, self.normalization, gb_all)
+            
+            # Apply feature extractor if necessary, might need adjustments
+            image_tensor = self.transform(image)
+            
+            # Assuming your target is a single scalar
+            target = torch.tensor(item[self.predict_target], dtype=torch.float32)
+        else:
+            image = load_and_preprocess_image(path, self.normalization, gb)
+            # Apply feature extractor if necessary, might need adjustments
+            image_tensor = self.transform(Image.fromarray(image))
         
-        # Assuming your target is a single scalar
-        target = torch.tensor(item[self.predict_target], dtype=torch.float32)
+            # Assuming your target is a single scalar                                                                                                                                                                                                                                                                                                                                                                                                      
+            target = torch.tensor(item[self.predict_target], dtype=torch.float32)
         return image_tensor, target  # Adjust based on actual output of feature_extractor
 '''
 
@@ -199,3 +224,4 @@ def save_checkpoint(model, optimizer, epoch, loss, filename="checkpoint.pth"):
         'optimizer_state_dict': optimizer.state_dict(),
         'loss': loss
     }, filename)
+    print(f"Checkpoint saved to {filename}, with loss: {loss:.4f} at epoch {epoch}")

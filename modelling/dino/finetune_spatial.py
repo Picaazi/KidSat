@@ -31,6 +31,7 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
     country_suffix = f'_{country.upper()}' if country else ''
     enhanced_suffix = f'_enhanced' if enhanced_targets else ''
     cleaned_suffix = '_cleaned' if cleaned else ''
+
     
     train_df = pd.read_csv(f'{data_folder}/train_fold_{fold}{country_suffix}{cleaned_suffix}.csv')
     test_df = pd.read_csv(f'{data_folder}/test_fold_{fold}{country_suffix}{cleaned_suffix}.csv')
@@ -44,7 +45,6 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
 
 
     train_df, test_df, predict_target = get_datasets(train_df, test_df, imagery_path, imagery_source, target, enhanced_targets)
-
 
     print(f"Enhanced fine-tuning: {enhanced_targets}")
     print(f"Number of target variables: {len(predict_target)}")
@@ -118,14 +118,6 @@ def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     base_model = torch.hub.load('facebookresearch/dinov2', model_name)
-
-    # def save_checkpoint(model, optimizer, epoch, loss, filename="checkpoint.pth"):
-    #     torch.save({
-    #         'epoch': epoch,
-    #         'model_state_dict': model.state_dict(),
-    #         'optimizer_state_dict': optimizer.state_dict(),
-    #         'loss': loss
-    #     }, filename)
 
     torch.cuda.empty_cache()
 

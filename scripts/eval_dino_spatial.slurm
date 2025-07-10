@@ -12,14 +12,19 @@
 #SBATCH --error=logs/eval_dino_spatial_sh_siren_cleaned%A_%a.err
 
 
+
 echo "Start time: $(date)"
+
 export PYTHONPATH="/user/work/cy23765/kidsat_test/KidSat:$PYTHONPATH"
 
-mkdir -p /user/work/cy23765/kidsat_test/KidSat/results/dino_spatial
+mkdir -p /user/work/$USER/KidSat/results/dino_spatial
 
-cd /user/work/cy23765/kidsat_test/KidSat
+cd /user/work/$USER/KidSat
+
+source setup.sh
 
 # EVALUATION: Test the fine-tuned DINOv2 model
+#         --grouped_bands 4 3 2\
 python modelling/dino/evaluate.py \
     --imagery_source L \
     --imagery_path data/imagery \
@@ -31,6 +36,8 @@ python modelling/dino/evaluate.py \
     --coord_encoding_method sh_siren \
     --cleaned \
     > results/dino_spatial/evaluation_sh_siren_cleaned.log 2>&1
+
+    
 
 
 echo "Job completed at: $(date)"
