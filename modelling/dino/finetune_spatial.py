@@ -20,39 +20,83 @@ from preparation import image_config, set_seed, CustomDataset, save_checkpoint, 
 from models import ViTForRegression
 warnings.filterwarnings("ignore")
 
-def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch_size, num_epochs, img_size = None, grouped_bands = None):
+def main(fold, model_name, target, imagery_path, imagery_source, emb_size, batch_size, num_epochs, img_size=None, grouped_bands = None, country = None, enhanced_targets=False, cleaned=False):
     
     normalization, imagery_size = image_config(imagery_source, img_size)
     
-    # if grouped_bands is None:
-    #     grouped_bands = [4, 3, 2]
+    #if grouped_bands is None:
+    #    grouped_bands = [4, 3, 2]
         
-    data_folder = r'survey_processing/processed_data/cleaning_test'
-    print(f'Loading data from {data_folder}')
-    print(f'Imagery path: {imagery_path}')
-    print(f'Imagery source: {imagery_source}')
-    print(f'Target: {target}')
-    print(f'Grouped bands: {grouped_bands}')
-    print(f'Batch size: {batch_size}')
-    print(f'Number of epochs: {num_epochs}')
-    print(f'Image size: {imagery_size}')
-    print(f'Embedding size: {emb_size}')
-    print(f'Model name: {model_name}')
+    data_folder = r'survey_processing/processed_data'
+    country_suffix = f'_{country.upper()}' if country else ''
+    enhanced_suffix = f'_enhanced' if enhanced_targets else ''
+    cleaned_suffix = '_cleaned' if cleaned else ''
+
     
-    train_df = pd.read_csv(f'{data_folder}/train_fold_{fold}.csv')
-    test_df = pd.read_csv(f'{data_folder}/test_fold_{fold}.csv')
+    train_df = pd.read_csv(f'{data_folder}/train_fold_{fold}{country_suffix}{cleaned_suffix}.csv')
+    test_df = pd.read_csv(f'{data_folder}/test_fold_{fold}{country_suffix}{cleaned_suffix}.csv')
     
-    model_folder = 'modelling/dino/model/Cleaning_test'
-    if not os.path.exists(model_folder):
-        os.makedirs(model_folder)
-        
-    best_model = model_folder+ "/" + f'{model_name}_{fold}_{str(grouped_bands)}all_cluster_best_{imagery_source}{target}_.pth'
-    last_model = model_folder+ "/" + f'{model_name}_{fold}_{str(grouped_bands)}all_cluster_last_{imagery_source}{target}_.pth'
-    print(f'Best model path: {best_model}')
-    print(f'Last model path: {last_model}')
+    best_model = f'modelling/dino/model/{model_name}_{fold}_{str(grouped_bands)}all_cluster_best_{imagery_source}{target}{country_suffix}{enhanced_suffix}{cleaned_suffix}.pth'
+    last_model = f'modelling/dino/model/{model_name}_{fold}_{str(grouped_bands)}all_cluster_last_{imagery_source}{target}{country_suffix}{enhanced_suffix}{cleaned_suffix}.pth'
+    
+    print(f"Model files:")
+    print(f"  Best: {best_model}")
+    print(f"  Last: {last_model}")
 
 
-    train_df, test_df, predict_target = get_datasets(train_df, test_df, imagery_path, imagery_source, target)
+    train_df, test_df, predict_target = get_datasets(train_df, test_df, imagery_path, imagery_source, target, enhanced_targets)
+
+    print(f"Enhanced fine-tuning: {enhanced_targets}")
+    print(f"Number of target variables: {len(predict_target)}")
+    print(f"Target variables: {predict_target}")
+
+    # Compare with expected 99 variables
+    expected_targets = ['h10', 'h3', 'h31', 'h5', 'h7', 'h9', 
+                    'hc70', 'hv109', 'hv121', 'hv106', 'hv201', 
+                    'hv204', 'hv205', 'hv216', 'hv225', 'hv271', 'v312', 'hv025']
+
+    # Check which base variables are missing
+    missing_base = [col for col in expected_targets if not any(col in t for t in predict_target)]
+    print(f"Missing base variables: {missing_base}")
+    # available_imagery = []
+    # for d in os.listdir(imagery_path):
+    #     if d[-2] == imagery_source:
+    #         for f in os.listdir(os.path.join(imagery_path, d)):
+    #             available_imagery.append(os.path.join(imagery_path, d, f))
+
+    # def is_available(centroid_id):
+    #     for centroid in available_imagery:
+    #         if centroid_id in centroid:
+    #             return True
+    #     return False
+    
+    # train_df = train_df[train_df['CENTROID_ID'].apply(is_available)]
+    # test_df = test_df[test_df['CENTROID_ID'].apply(is_available)]
+
+    # def filter_contains(query):
+    #     #Returns a list of items that contain the given query substring.
+    #     for item in available_imagery:
+    #         if query in item:
+    #             return item
+            
+    # train_df['imagery_path'] = train_df['CENTROID_ID'].apply(filter_contains)
+    # test_df['imagery_path'] = test_df['CENTROID_ID'].apply(filter_contains)
+    
+    # if target == '':
+    #     predict_target = ['h10', 'h3', 'h31', 'h5', 'h7', 'h9', 
+    #                     'hc70', 'hv109', 'hv121', 'hv106', 'hv201', 
+    #                     'hv204', 'hv205', 'hv216', 'hv225', 'hv271', 'v312']
+    # else:
+    #     predict_target = [target]
+
+    # filtered_predict_target = []
+    # for col in predict_target:
+    #     filtered_predict_target.extend(
+    #         [c for c in train_df.columns if c == col or re.match(f"^{col}_[^a-zA-Z]", c)]
+    #     )
+    # # Drop rows with NaN values in the filtered subset of columns
+    # train_df = train_df.dropna(subset=filtered_predict_target)
+    # predict_target = sorted(filtered_predict_target)
 
     # Set your desired seed
     seed = 42
@@ -157,6 +201,17 @@ if __name__ == '__main__':
     parser.add_argument('--num_epochs', type=int, default=20, help='Number of epochs for training')
     parser.add_argument('--imagery_size', type=int, help='Size of the imagery')
     parser.add_argument('--grouped_bands', type=int, nargs=3, help='Three integer grouped bands (e.g., 4 3 2)')
+    parser.add_argument('--country', type=str, help='Two-letter country code for single country training (e.g., ET, KE)')
+    parser.add_argument('--enhanced_targets', action='store_true', help='Include hv025 in fine-tuning targets')
+    parser.add_argument('--cleaned', action='store_true', help='Indicates if the data is cleaned during processing')
     args = parser.parse_args()
+
+    # Validate country code if provided
+    if args.country:
+        args.country = args.country.upper()
+        if len(args.country) != 2:
+            raise ValueError("Country code must be exactly 2 letters (e.g., ET, KE)")
+        
     main(args.fold, args.model_name, args.target, args.imagery_path, args.imagery_source,
-        args.emb_size, args.batch_size, args.num_epochs, args.imagery_size, args.grouped_bands)
+        args.emb_size, args.batch_size, args.num_epochs, args.imagery_size, args.grouped_bands, 
+        args.country, args.enhanced_targets, args.cleaned)

@@ -8,7 +8,7 @@ import random
 import os
 import re
 
-def get_datasets(train_df, test_df, imagery_path, imagery_source, target =''):
+def get_datasets(train_df, test_df, imagery_path, imagery_source, target ='', enhanced_targets=False):
     available_imagery = []
     for d in os.listdir(imagery_path):
         if d[-2] == imagery_source:
@@ -38,6 +38,10 @@ def get_datasets(train_df, test_df, imagery_path, imagery_source, target =''):
         predict_target = ['h10', 'h3', 'h31', 'h5', 'h7', 'h9', 
                         'hc70', 'hv109', 'hv121', 'hv106', 'hv201', 
                         'hv204', 'hv205', 'hv216', 'hv225', 'hv271', 'v312']
+
+        if enhanced_targets:
+            predict_target.append('hv025')
+
     else:
         predict_target = [target]
 
@@ -49,7 +53,8 @@ def get_datasets(train_df, test_df, imagery_path, imagery_source, target =''):
     # Drop rows with NaN values in the filtered subset of columns
     train_df = train_df.dropna(subset=filtered_predict_target)
     predict_target = sorted(filtered_predict_target)
-    
+
+        
     return train_df, test_df, predict_target
     
 
@@ -113,7 +118,56 @@ def set_seed(seed):
     random.seed(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
-    
+
+'''   
+class CustomDataset(Dataset):
+    def __init__(self, dataframe, transform, normalization, predict_target, grouped_bands=None, all = False):
+        self.dataframe = dataframe
+        self.transform = transform
+        
+        self.normalization = normalization
+        self.predict_target = predict_target
+        self.grouped_bands = grouped_bands
+        self.all = all
+        
+    def __len__(self):
+        return len(self.dataframe)
+
+    def __getitem__(self, idx):
+        item = self.dataframe.iloc[idx]
+        path = item['imagery_path']
+        gb = [4,3,2]
+        gb_all = [4,3,2, 5,4,2,6,5,4]
+        if self.grouped_bands is None:
+            if "L7" in path or "L5" in path:
+                gb_all = [3,2,1,4,3,1,5,4,3]
+                gb = [3, 2, 1] 
+            elif "L8" in path or "S2" in path:
+                gb_all = [4,3,2, 5,4,2,6,5,4]
+                gb = [4, 3, 2]
+            else:
+                print("No satilite found, idk what band to use")
+        else:
+            gb = self.grouped_bands
+            
+        if self.all:
+            image = load_and_preprocess_image_all(path, self.normalization, gb_all)
+            
+            # Apply feature extractor if necessary, might need adjustments
+            image_tensor = self.transform(image)
+            
+            # Assuming your target is a single scalar
+            target = torch.tensor(item[self.predict_target], dtype=torch.float32)
+        else:
+            image = load_and_preprocess_image(path, self.normalization, gb)
+            # Apply feature extractor if necessary, might need adjustments
+            image_tensor = self.transform(Image.fromarray(image))
+        
+            # Assuming your target is a single scalar                                                                                                                                                                                                                                                                                                                                                                                                      
+            target = torch.tensor(item[self.predict_target], dtype=torch.float32)
+        return image_tensor, target  # Adjust based on actual output of feature_extractor
+'''
+
 class CustomDataset(Dataset):
     def __init__(self, dataframe, transform, normalization, predict_target, grouped_bands=None, all = False):
         self.dataframe = dataframe
@@ -161,6 +215,7 @@ class CustomDataset(Dataset):
             target = torch.tensor(item[self.predict_target], dtype=torch.float32)
         return image_tensor, target  # Adjust based on actual output of feature_extractor
 
+        
 # Function to save model checkpoints
 def save_checkpoint(model, optimizer, epoch, loss, filename="checkpoint.pth"):
     torch.save({

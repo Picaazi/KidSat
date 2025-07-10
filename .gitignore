@@ -176,7 +176,7 @@ archive/
 *.csv
 *.pdf
 *.svg
-*.png
+#*.png
 *json
 submit_*
 config*
@@ -198,6 +198,7 @@ logs/
 .idea
 .DS_Store
 .dependencies_installed
+survey_processing/dhs_data/*
 
 imagery/
 .tif

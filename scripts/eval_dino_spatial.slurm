@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=eval_dino_spatial_%a
+#SBATCH --job-name=eval_dino_spatial_sh_siren_cleaned%a
 #SBATCH --partition=magma
 #SBATCH --account=math022462
 #SBATCH --nodes=1
@@ -7,15 +7,15 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
 #SBATCH --mem=64G
-#SBATCH --time=12:00:00
-#SBATCH --output=logs/eval_dino_spatial_%A_%a.out
-#SBATCH --error=logs/eval_dino_spatial_%A_%a.err
+#SBATCH --time=4:00:00
+#SBATCH --output=logs/eval_dino_spatial_sh_siren_cleaned%A_%a.out
+#SBATCH --error=logs/eval_dino_spatial_sh_siren_cleaned%A_%a.err
 
 
 
 echo "Start time: $(date)"
-export PYTHONPATH="/user/work/$USER/KidSat:$PYTHONPATH"
-export CUDA_VISIBLE_DEVICES=0
+
+export PYTHONPATH="/user/work/cy23765/kidsat_test/KidSat:$PYTHONPATH"
 
 mkdir -p /user/work/$USER/KidSat/results/dino_spatial
 
@@ -30,13 +30,15 @@ python modelling/dino/evaluate.py \
     --imagery_path data/imagery \
     --mode spatial \
     --use_checkpoint \
-
-
-    
-    > results/dino_spatial/evaluation.log 2>&1
+    --target act_deprived_sev \
+    --model_not_named_target \
+    --use_location_features \
+    --coord_encoding_method sh_siren \
+    --cleaned \
+    > results/dino_spatial/evaluation_sh_siren_cleaned.log 2>&1
 
     
 
 
 echo "Job completed at: $(date)"
-echo "DINOv2 spatial evaluation completed"
+echo "DINOv2 spatial evaluation sh siren cleaned completed"

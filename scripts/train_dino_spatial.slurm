@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=train_dino_spatial_%a
+#SBATCH --job-name=train_dino_spatial_cleaned%a
 #SBATCH --partition=magma
 #SBATCH --account=math022462
 #SBATCH --nodes=1
@@ -7,15 +7,15 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:1
 #SBATCH --mem=64G
-#SBATCH --time=24:00:00
+#SBATCH --time=96:00:00
 #SBATCH --array=1-5  # Repository uses folds 1-5, not 0-4
-#SBATCH --output=logs/train_dino_spatial_%A_%a.out
-#SBATCH --error=logs/train_dino_spatial_%A_%a.err
+#SBATCH --output=logs/train_dino_spatial_cleaned%A_%a.out
+#SBATCH --error=logs/train_dino_spatial_cleaned%A_%a.err
 
 echo "Start time: $(date)"
 
 # Set up environment
-export PYTHONPATH="/user/work/$USER/KidSat:$PYTHONPATH"
+export PYTHONPATH="/user/work/cy23765/kidsat_test/KidSat:$PYTHONPATH"
 
 # Create directories
 mkdir -p /user/work/$USER/KidSat/logs
@@ -31,7 +31,8 @@ python modelling/dino/finetune_spatial.py \
     --imagery_source L \
     --batch_size 8 \
     --num_epochs 20 \
+    --cleaned
 
 echo "Job completed at: $(date)"
-echo "DINOv2 spatial training fold $SLURM_ARRAY_TASK_ID completed"
+echo "DINOv2 spatial cleaned training fold $SLURM_ARRAY_TASK_ID completed"
 

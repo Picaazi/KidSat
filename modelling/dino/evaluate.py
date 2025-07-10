@@ -1,4 +1,3 @@
-# Evulation Code from KidSat
 import argparse
 import numpy as np
 import rasterio
@@ -9,6 +8,8 @@ from PIL import Image
 from sklearn.model_selection import KFold, cross_val_score
 from sklearn.linear_model import RidgeCV
 from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from models import SphericalHarmonicsEncoder, PovertySirenSH, load_sh_siren_model, extract_sh_siren_features
 from torch.utils.data import Dataset, DataLoader
 
 import torch.optim as optim
@@ -19,6 +20,17 @@ warnings.filterwarnings("ignore")
 import pandas as pd
 from tqdm import tqdm
 import os
+
+# Try to import LocationEncoder 
+try:
+    from locationencoder.pe import SphericalHarmonics
+    LOCATION_ENCODER_AVAILABLE = True
+    print("LocationEncoder available - using research-validated implementation")
+except ImportError:
+    LOCATION_ENCODER_AVAILABLE = False
+    print("LocationEncoder not available - using fallback implementation")
+
+#LOCATION_ENCODER_AVAILABLE = False
 
 # Function to evaluate the model performance on given data
 # fold: Fold number or country name
@@ -33,34 +45,180 @@ import os
 # grouped_bands: which RGB bands to use for input image
 
 
-def evaluate(fold, model_name, target="", use_checkpoint=False, model_not_named_target=True, imagery_path=None, 
-            imagery_source=None, mode="temporal", model_output_dim=768, grouped_bands=None):
+
+def prepare_location_features(df, fold, country=None, enhanced_targets=False,
+                              use_location_encoder=False, coord_encoding_method='spherical_harmonics', cleaned=False):
+    """
+    UPDATED: Now supports SH + SIREN approach
+    """
+    all_features = []
+    feature_names = []
+
+    print(f"Preparing location features with method: {coord_encoding_method}")
     
+    if 'LATNUM' not in df.columns or 'LONGNUM' not in df.columns:
+        print("Missing coordinate columns: LATNUM, LONGNUM")
+        return None, []
+    
+    lat = df['LATNUM'].values
+    lon = df['LONGNUM'].values
+
+    if coord_encoding_method == 'sh_siren':
+        # Use SH + SIREN approach
+        print("Using SH + Fine-tuned SIREN method")
+        
+        model_par_dir = "modelling/dino/model/"
+        country_suffix = f'_{country.upper()}' if country else ''
+        enhanced_suffix = f'_enhanced' if enhanced_targets else ''
+        cleaned_suffix = '_cleaned' if cleaned else ''
+        
+        # Look for SH + SIREN model
+        sh_siren_model_path = f"{model_par_dir}sh_siren_spatial_{fold}_best{country_suffix}{enhanced_suffix}{cleaned_suffix}.pth"
+        
+        if os.path.exists(sh_siren_model_path):
+            try:
+                print(f"Loading SH + SIREN model: {sh_siren_model_path}")
+                
+                # Load model
+                device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+                model, checkpoint = load_sh_siren_model(sh_siren_model_path, device)
+
+                # Extract location features
+                coordinates = np.column_stack([lat, lon])
+                coord_features = extract_sh_siren_features(model, coordinates, device, batch_size=64)
+                
+                all_features.append(coord_features)
+                feature_names.extend([f'sh_siren_{i}' for i in range(coord_features.shape[1])])
+                
+                print(f"Extracted {coord_features.shape[1]} SH + SIREN features")
+                print(f"   Model info: SH_L={checkpoint.get('sh_L', 15)}, repr_dim={checkpoint['representation_dim']}")
+                
+            except Exception as e:
+                print(f"Error loading SH + SIREN model: {e}")
+                print("   Falling back to spherical harmonics...")
+                coord_encoding_method = 'spherical_harmonics'
+        else:
+            print(f"SH + SIREN model not found: {sh_siren_model_path}")
+            print("   Train the model first using: python finetune_siren.py")
+            print("   Falling back to spherical harmonics...")
+            coord_encoding_method = 'spherical_harmonics'
+
+    
+    if coord_encoding_method == 'spherical_harmonics':
+        # FALLBACK: Basic spherical harmonics
+        print("Using basic spherical harmonics")
+        
+        if use_location_encoder and LOCATION_ENCODER_AVAILABLE:
+            try:
+                print("Using LocationEncoder SphericalHarmonics")
+                sh_encoder = SphericalHarmonics(legendre_polys=20)
+                lonlat_tensor = torch.tensor(np.column_stack([lon, lat]), dtype=torch.float32)
+                
+                with torch.no_grad():
+                    coord_features = sh_encoder(lonlat_tensor)
+                
+                if hasattr(coord_features, 'detach'):
+                    coord_features = coord_features.detach().numpy()
+                
+                all_features.append(coord_features)
+                feature_names.extend([f'locationenc_sh_{i}' for i in range(coord_features.shape[1])])
+                
+                print(f"Added LocationEncoder SH features: {coord_features.shape[1]} dimensions")
+                
+            except Exception as e:
+                print(f"LocationEncoder failed: {e}")
+                use_location_encoder = False
+        
+        if not use_location_encoder or not LOCATION_ENCODER_AVAILABLE:
+            print("Using fallback spherical harmonics implementation")
+            
+            coord_encoder = SphericalHarmonicsEncoder(L=15)
+            coord_features = coord_encoder.encode_coordinates(lat, lon)
+            all_features.append(coord_features)
+            feature_names.extend([f'fallback_sh_{i}' for i in range(coord_features.shape[1])])
+            
+            print(f"Added fallback SH features: {coord_features.shape[1]} dimensions")
+
+    # Combine all features
+    if all_features:
+        combined_features = np.concatenate(all_features, axis=1)
+        print(f"Total location features: {combined_features.shape[1]} dimensions")
+        return combined_features, feature_names
+    else:
+        print("No location features could be generated")
+        return None, []
+
+def evaluate(
+    fold,
+    model_name,
+    target="",
+    use_checkpoint=False,
+    model_not_named_target=True,
+    imagery_path=None,
+    imagery_source=None,
+    mode="temporal",
+    model_output_dim=768,
+    grouped_bands=None,
+    country=None,
+    enhanced_targets=False,
+    use_location_features=False, # Use Geo info 
+    use_location_encoder=False,
+    coord_encoding_method='spherical_harmonics',
+    cleaned=False, # Use cleaned data or not
+):
+
     model_par_dir = "modelling/dino/model/"
+    country_suffix = f'_{country.upper()}' if country else ''
+    enhanced_suffix = f'_enhanced' if enhanced_targets else ''
+    cleaned_suffix = '_cleaned' if cleaned else ''
 
     # Build checkpoint filename (pth file) based on mode and target
     if use_checkpoint:
         named_target = target if model_not_named_target else ""
         if mode == "temporal":
-            checkpoint = f"{model_par_dir}{model_name}_temporal_best_{imagery_source}{named_target}_.pth"
+            checkpoint = f"{model_par_dir}{model_name}_temporal_best_{imagery_source}{named_target}{country_suffix}{enhanced_suffix}.pth"
         elif mode == "spatial":
-            checkpoint = f"{model_par_dir}{model_name}_{fold}_{grouped_bands}all_cluster_best_{imagery_source}{named_target}_.pth"
+            checkpoint = f"{model_par_dir}{model_name}_{fold}_{grouped_bands}all_cluster_best_{imagery_source}{named_target}{country_suffix}{enhanced_suffix}{cleaned_suffix}.pth"
         elif mode == "one_country":
-            checkpoint = f"{model_par_dir}{model_name}_{fold}_one_country_best_{imagery_source}{named_target}_.pth"
+            checkpoint = f"{model_par_dir}{model_name}_{fold}_one_country_best_{imagery_source}{named_target}{country_suffix}{enhanced_suffix}.pth"
         else:
             raise Exception(mode)
 
-    print(
-        f"Evaluating {model_name} on fold {fold} with target {target} using checkpoint {checkpoint if use_checkpoint else 'None'}"
-    )
+    print(f"=== KIDSAT EVALUATION ===")
+    print(f"Fold: {fold}, Country: {country if country else 'All'}")
+    print(f"Enhanced targets for fine-tuning: {enhanced_targets}")
+    print(f"Location features: {use_location_features}")
+    print(f"LocationEncoder: {use_location_encoder} ({coord_encoding_method})")
+    print(f"Checkpoint: {checkpoint if use_checkpoint else 'None'}")
+
+
+    if target == "":
+        eval_target = "deprived_sev"
+        target_size = 101 if enhanced_targets else 99
+    else:
+        eval_target = target
+        target_size = 1 if model_not_named_target else 99
+
+
+    # Modified to adjust the actual number of features/column (target size) of the country-wise model
+    if use_checkpoint and os.path.exists(checkpoint):
+        # Load checkpoint to get the actual target size
+        temp_state = torch.load(checkpoint, map_location='cpu')
+        actual_target_size = temp_state['model_state_dict']['regression_head.weight'].shape[0]
+        target_size = actual_target_size
+        print(f"Detected target size from checkpoint: {target_size}")
+
+
 
     # Determine size of target
+    '''
     if target == "":
         eval_target = "deprived_sev"
         target_size = 99
     else:
         eval_target = target
         target_size = 1 if model_not_named_target else 99
+    '''
 
     # Image Modify based on the Satellite used (L and S)
     normalization = 30000.0 if imagery_source == "L" else 3000.0
@@ -74,9 +232,10 @@ def evaluate(fold, model_name, target="", use_checkpoint=False, model_not_named_
         train_df = pd.read_csv(f"{data_folder}before_2020.csv")
         test_df = pd.read_csv(f"{data_folder}after_2020.csv")
     else:
-        train_df = pd.read_csv(f"{data_folder}train_fold_{fold}.csv")
-        test_df = pd.read_csv(f"{data_folder}test_fold_{fold}.csv")
+        train_df = pd.read_csv(f"{data_folder}train_fold_{fold}{country_suffix}{cleaned_suffix}.csv")
+        test_df = pd.read_csv(f"{data_folder}test_fold_{fold}{country_suffix}{cleaned_suffix}.csv")
 
+    
     # Filter out imagery files that match the source type (L or S)
     available_imagery = [
         os.path.join(imagery_path, d, f)
@@ -100,28 +259,47 @@ def evaluate(fold, model_name, target="", use_checkpoint=False, model_not_named_
                 return item
 
     train_df["imagery_path"] = train_df["CENTROID_ID"].apply(filter_contains)
-    train_df = train_df[train_df["deprived_sev"].notna()]
+    # train_df = train_df[train_df["deprived_sev"].notna()]
+    train_df = train_df[train_df[eval_target].notna()]
     test_df["imagery_path"] = test_df["CENTROID_ID"].apply(filter_contains)
-    test_df = test_df[test_df["deprived_sev"].notna()]
+    # test_df = test_df[test_df["deprived_sev"].notna()]
+    test_df = test_df[test_df[eval_target].notna()]
+
+    # Reset indices after all filtering is complete
+    train_df = train_df.reset_index(drop=True)
+    test_df = test_df.reset_index(drop=True)
+
+    # Prepare location features
+    if use_location_features:
+        print("Preparing training location features...")
+        train_location_features, feature_names = prepare_location_features(train_df, fold, country, enhanced_targets,
+            use_location_encoder, coord_encoding_method, cleaned)
+        
+        print("Preparing test location features...")
+        test_location_features, _ = prepare_location_features(test_df, fold, country, enhanced_targets,
+            use_location_encoder, coord_encoding_method, cleaned)
+    else:
+        train_location_features = None
+        test_location_features = None
+        feature_names = []
+        print("Not using location features")
 
     # Load image files and preprocess (stack bands, normalize, clip)
-    def load_and_preprocess_image(path):
+    def load_and_preprocess_image(path, grouped_bands=None):
         with rasterio.open(path) as src:
-            
-            gb = [4,3,2]
+            # Infer bands if not provided
             if grouped_bands is None:
                 if "L7" in path or "L5" in path:
-                    gb = [3, 2, 1] 
+                    grouped_bands = [3, 2, 1]
                 elif "L8" in path or "S2" in path:
-                    gb = [4, 3, 2]
+                    grouped_bands = [4, 3, 2]
                 else:
-                    print("No satilite found, idk what band to use")
-            else:
-                gb = grouped_bands
-                
-            r = src.read(gb[0])
-            g = src.read(gb[1])
-            b = src.read(gb[2])
+                    raise ValueError(f"Cannot infer bands for {path}. Please provide grouped_bands.")
+
+            r = src.read(grouped_bands[0])
+            g = src.read(grouped_bands[1])
+            b = src.read(grouped_bands[2])
+
             img = np.dstack((r, g, b))
             img = img / normalization * 255.0
         img = np.nan_to_num(img, nan=0, posinf=255, neginf=0)
@@ -154,7 +332,6 @@ def evaluate(fold, model_name, target="", use_checkpoint=False, model_not_named_
 
     model = ViTForRegression(base_model)
 
-    # No idea how checkpoint is used, if known pls help me to add some comment
     if use_checkpoint:
         state_dict = torch.load(checkpoint)
         model.load_state_dict(state_dict["model_state_dict"])
@@ -170,7 +347,7 @@ def evaluate(fold, model_name, target="", use_checkpoint=False, model_not_named_
 
         def __getitem__(self, idx):
             item = self.dataframe.iloc[idx]
-            image = load_and_preprocess_image(item["imagery_path"])
+            image = load_and_preprocess_image(item["imagery_path"], grouped_bands)
             image_tensor = self.transform(Image.fromarray(image))
             return image_tensor, item[eval_target]
 
@@ -183,8 +360,6 @@ def evaluate(fold, model_name, target="", use_checkpoint=False, model_not_named_
     train_dataset = CustomDataset(train_df, transform)
     val_dataset = CustomDataset(test_df, transform)
 
-    # I believe there is a certain format for the class CustomDataset in order to run
-    # the function DataLoader
     train_loader = DataLoader(train_dataset, batch_size=1, shuffle=False, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False, num_workers=4)
 
@@ -192,175 +367,211 @@ def evaluate(fold, model_name, target="", use_checkpoint=False, model_not_named_
     model.eval()
 
     # Extract features from base model for training data
-    X_train, y_train = [], []
-    print("Extracting features from training data...")
+    X_train_visual, y_train = [], []
+
     for images, targets in tqdm(train_loader):
         images, targets = images.to(device), targets.to(device)
         with torch.no_grad():
             outputs = model.base_model(images)
-        X_train.append(outputs.cpu()[0].numpy())
+        X_train_visual.append(outputs.cpu()[0].numpy())
         y_train.append(targets.cpu()[0].numpy())
 
     # Extract features from base model for test data
-    X_test, y_test = [], []
-    print("Extracting features from test set...")
+    X_test_visual, y_test = [], []
+
     for images, targets in tqdm(val_loader):
         images, targets = images.to(device), targets.to(device)
         with torch.no_grad():
             outputs = model.base_model(images)
-        X_test.append(outputs.cpu()[0].numpy())
+        X_test_visual.append(outputs.cpu()[0].numpy())
         y_test.append(targets.cpu()[0].numpy())
 
-    X_train, y_train = np.array(X_train), np.array(y_train)
-    X_test, y_test = np.array(X_test), np.array(y_test)
+    X_train_visual, y_train = np.array(X_train_visual), np.array(y_train)
+    X_test_visual, y_test = np.array(X_test_visual), np.array(y_test)
+
+    # Extract metadata for geographic analysis
+    train_metadata = {
+        'CENTROID_ID': train_df['CENTROID_ID'].values,
+        'LATNUM': train_df['LATNUM'].values,
+        'LONGNUM': train_df['LONGNUM'].values,
+    }
+
+    test_metadata = {
+        'CENTROID_ID': test_df['CENTROID_ID'].values,
+        'LATNUM': test_df['LATNUM'].values,
+        'LONGNUM': test_df['LONGNUM'].values,
+    }
+
+    # Combine visual and location features
+    if use_location_features:
+        # Since DataLoader processes samples in order and we reset indices,
+        # location features align directly with visual features
+        X_train = np.concatenate([X_train_visual, train_location_features], axis=1)
+        X_test = np.concatenate([X_test_visual, test_location_features], axis=1)
+        
+        print(f"\nCombined feature dimensions:")
+        print(f"  Visual features: {X_train_visual.shape[1]}")
+        print(f"  Location features: {train_location_features.shape[1]}")
+        print(f"  Total features: {X_train.shape[1]}")
+    else:
+        X_train = X_train_visual
+        X_test = X_test_visual
+        print(f"\nUsing visual features only: {X_train.shape[1]} dimensions")
+    
 
     # Save extracted features and targets to CSV
     results_folder = (
-        f"modelling/dino/results/split_new_{mode}{imagery_source}_{fold}_{grouped_bands}/"
+        f"modelling/dino/results/split_{mode}{imagery_source}_{fold}"
+        f"{'_sh' if coord_encoding_method == 'spherical_harmonics' else ''}"
+        f"{'_sh_siren' if coord_encoding_method == 'sh_siren' else ''}"
+        f"{'_enh' if enhanced_targets else ''}"
+        f"{country_suffix}"
+        f"{cleaned_suffix if cleaned else ''}"
+        f"/"
     )
     
     if not os.path.exists(results_folder):
         os.makedirs(results_folder)
         
-    pd.DataFrame(X_train).to_csv(results_folder + "X_train.csv", index=False)
-    pd.DataFrame(y_train, columns=["target"]).to_csv(results_folder + "y_train.csv", index=False)
-    pd.DataFrame(X_test).to_csv(results_folder + "X_test.csv", index=False)
-    pd.DataFrame(y_test, columns=["target"]).to_csv(results_folder + "y_test.csv", index=False)
+    # Save all feature sets
+    pd.DataFrame(X_train).to_csv(f"{results_folder}X_train_combined.csv", index=False)
+    pd.DataFrame(X_test).to_csv(f"{results_folder}X_test_combined.csv", index=False)
+    pd.DataFrame(X_train_visual).to_csv(f"{results_folder}X_train_visual.csv", index=False)
+    pd.DataFrame(X_test_visual).to_csv(f"{results_folder}X_test_visual.csv", index=False)
+
+    if use_location_features:
+        pd.DataFrame(train_location_features).to_csv(f"{results_folder}X_train_location.csv", index=False)
+        pd.DataFrame(test_location_features).to_csv(f"{results_folder}X_test_location.csv", index=False)
+        pd.DataFrame(feature_names, columns=['feature_name']).to_csv(f"{results_folder}feature_names.csv", index=False)
+
 
     # Ridge Regression with cross-validation to evaluate features
     alphas = np.logspace(-6, 6, 20)
-    ridge_pipeline = Pipeline(
-        [("ridge", RidgeCV(alphas=alphas, cv=5, scoring="neg_mean_absolute_error"))]
-    )
+
+    # Define the pipeline once
+    ridge_pipeline = Pipeline([
+        ('scaler', StandardScaler()),
+        ("ridge", RidgeCV(alphas=alphas, cv=5, scoring="neg_mean_absolute_error"))
+    ])
 
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
-    cv_scores = cross_val_score(
-        ridge_pipeline, X_train, y_train, cv=kf, scoring="neg_mean_absolute_error"
-    )
 
-    print("Cross-validation scores (negative MAE):", cv_scores)
-    print("Mean cross-validation score (negative MAE):", cv_scores.mean())
-
-    ridge_pipeline.fit(X_train, y_train)
-    test_score = np.mean(np.abs(ridge_pipeline.predict(X_test) - y_test))
-    print("Test Score (negative MAE):", test_score)
-
-    # # Make sure data is in float32 format for PyTorch
-    # X_train_tensor = torch.tensor(X_train, dtype=torch.float32)
-    # y_train_tensor = torch.tensor(y_train, dtype=torch.float32).view(-1, 1)
-    # X_test_tensor = torch.tensor(X_test, dtype=torch.float32)
-    # y_test_tensor = torch.tensor(y_test, dtype=torch.float32).view(-1, 1)
-
-    # # Define 5-layer Neural Network (4 hidden layers + 1 output layer)
-    # class FiveLayerNN(nn.Module):
-    #     def __init__(self, input_dim):
-    #         super(FiveLayerNN, self).__init__()
-    #         self.net = nn.Sequential(
-    #             nn.Linear(input_dim, 128),
-    #             nn.ReLU(),
-    #             nn.Linear(128, 64),
-    #             nn.ReLU(),
-    #             nn.Linear(64, 64),
-    #             nn.ReLU(),
-    #             nn.Linear(64, 32),
-    #             nn.ReLU(),
-    #             nn.Linear(32, 1),
-    #             nn.Sigmoid()  # Final activation is sigmoid
-    #         )
+    # COMPARATIVE ANALYSIS
+    if use_location_features:
+        print("\n=== COMPARATIVE ANALYSIS ===")
         
-    #     def forward(self, x):
-    #         return self.net(x)
+        # Visual features only
+        print("1. Visual features only:")
+        visual_cv_scores = cross_val_score(
+            ridge_pipeline, X_train_visual, y_train, cv=kf, scoring="neg_mean_absolute_error"
+        )
+        ridge_pipeline.fit(X_train_visual, y_train)
+        visual_only_score = np.mean(np.abs(ridge_pipeline.predict(X_test_visual) - y_test))
+        
+        print(f"  CV MAE: {-visual_cv_scores.mean():.4f} ± {visual_cv_scores.std():.4f}")
+        print(f"  Test MAE: {visual_only_score:.4f}")
+        
+        # Location features only (if meaningful)
+        if train_location_features.shape[1] > 0:
+            print('2. Location features only:')
+            location_cv_scores = cross_val_score(
+                ridge_pipeline, train_location_features, y_train, cv=kf, scoring="neg_mean_absolute_error"
+            )
+            ridge_pipeline.fit(train_location_features, y_train)
+            location_only_score = np.mean(np.abs(ridge_pipeline.predict(test_location_features) - y_test))
+
+            print(f"  CV MAE: {-location_cv_scores.mean():.4f} ± {location_cv_scores.std():.4f}")
+            print(f"  Test MAE: {location_only_score:.4f}")
+        else:
+            location_only_score = None
+        
+        # Combined features
+        print('3. Combined features:')
+        combined_cv_scores = cross_val_score(
+            ridge_pipeline, X_train, y_train, cv=kf, scoring="neg_mean_absolute_error"
+        )
+        ridge_pipeline.fit(X_train, y_train)
+        combined_score = np.mean(np.abs(ridge_pipeline.predict(X_test) - y_test))
+        
+        print(f"  CV MAE: {-combined_cv_scores.mean():.4f} ± {combined_cv_scores.std():.4f}")
+        print(f"  Test MAE: {combined_score:.4f}")
+        
+        # Calculate improvement
+        improvement = visual_only_score - combined_score
+        improvement_pct = (improvement / visual_only_score) * 100
+        print(f"\nImprovement from adding location: {improvement:.4f} MAE ({improvement_pct:.1f}%)")
+        
+        '''
+        # Save detailed analysis
+        analysis_results = {
+            'visual_only_cv_mae': -visual_cv_scores.mean(),
+            'visual_only_cv_std': visual_cv_scores.std(),
+            'visual_only_test_mae': visual_only_score,
+            'location_only_test_mae': location_only_score,
+            'combined_cv_mae': -combined_cv_scores.mean(),
+            'combined_cv_std': combined_cv_scores.std(),
+            'combined_test_mae': combined_score,
+            'improvement_mae': improvement,
+            'improvement_pct': improvement_pct,
+            'visual_features_count': X_train_visual.shape[1],
+            'location_features_count': train_location_features.shape[1],
+            'total_features_count': X_train.shape[1],
+            'location_encoder_used': use_location_encoder,
+            'coord_encoding_method_used': coord_encoding_method,
+            'enhanced_targets_used': enhanced_targets
+        }
+        
+        pd.DataFrame([analysis_results]).to_csv(results_folder + "feature_analysis.csv", index=False)
+        '''
+        
+        # Use combined results for final reporting
+        final_cv_scores = combined_cv_scores
+        final_test_score = combined_score
+    
+    else:
+        # Standard evaluation without location features
+        print('Visual features only: ')
+        final_cv_scores = cross_val_score(
+            ridge_pipeline, X_train, y_train, cv=kf, scoring="neg_mean_absolute_error"
+        )
+        ridge_pipeline.fit(X_train, y_train)
+        final_test_score = np.mean(np.abs(ridge_pipeline.predict(X_test) - y_test))
 
 
-    # # Hyperparameters
-    # num_epochs = 100
-    # batch_size = 64
-    # learning_rate = 0.001
+    # Save predictions with metadata for map visualization
+    ridge_pipeline.fit(X_train, y_train)
+    train_predictions = ridge_pipeline.predict(X_train)
+    test_predictions = ridge_pipeline.predict(X_test)
+    
+    # Create comprehensive results for geographic analysis
+    train_results = pd.DataFrame({
+        'target': y_train,
+        'prediction': train_predictions,
+        'error': np.abs(y_train - train_predictions),
+        **train_metadata
+    })
+    
+    test_results = pd.DataFrame({
+        'target': y_test,
+        'prediction': test_predictions,
+        'error': np.abs(y_test - test_predictions),
+        **test_metadata
+    })
 
-    # # Cross-validation setup
-    # kf = KFold(n_splits=5, shuffle=True, random_state=42)
-    # cv_scores = []
+    # Save separete files for analysis
+    train_results.to_csv(f"{results_folder}train_predictions_with_metadata.csv", index=False)
+    test_results.to_csv(f"{results_folder}test_predictions_with_metadata.csv", index=False)
 
-    # for fold_cv, (train_idx, val_idx) in enumerate(kf.split(X_train_tensor)):
-    #     print(f"\nStarting Fold {fold_cv+1}/{kf.get_n_splits()}")
+    print(f"\nSaved results with geographic metadata to {results_folder}")
 
-    #     X_tr, X_val = X_train_tensor[train_idx], X_train_tensor[val_idx]
-    #     y_tr, y_val = y_train_tensor[train_idx], y_train_tensor[val_idx]
+    # Final results
+    print(f"\n=== FINAL EVALUATION RESULTS ===")
+    print("Cross-validation scores (negative MAE):", final_cv_scores)
+    print("Mean cross-validation score (negative MAE):", final_cv_scores.mean())
+    print("Test Score (MAE):", final_test_score)
 
-    #     # Define model, loss, optimizer
-    #     model_nn = FiveLayerNN(input_dim=X_train.shape[1]).to(device)
-    #     criterion = nn.L1Loss()  # MAE
-    #     optimizer = optim.Adam(model_nn.parameters(), lr=learning_rate)
+    return final_test_score
 
-    #     # Dataset and DataLoader for mini-batch training
-    #     train_dataset_cv = torch.utils.data.TensorDataset(X_tr, y_tr)
-    #     train_loader_cv = torch.utils.data.DataLoader(train_dataset_cv, batch_size=batch_size, shuffle=True)
-
-    #     print(f"Training Fold {fold_cv+1}")
-    #     for epoch in tqdm(range(num_epochs), desc=f"Epochs (Fold {fold_cv+1})"):
-    #         model_nn.train()
-    #         epoch_loss = 0
-    #         for batch_X, batch_y in tqdm(train_loader_cv, desc=f"Batch Training (Fold {fold_cv+1}, Epoch {epoch+1})", leave=False):
-    #             batch_X, batch_y = batch_X.to(device), batch_y.to(device)
-    #             optimizer.zero_grad()
-    #             outputs = model_nn(batch_X)
-    #             loss = criterion(outputs, batch_y)
-    #             loss.backward()
-    #             optimizer.step()
-    #             epoch_loss += loss.item()
-
-    #         # Optionally print epoch loss
-    #         tqdm.write(f"Fold {fold_cv+1} Epoch {epoch+1} Loss: {epoch_loss/len(train_loader_cv):.4f}")
-
-    #     # Validation
-    #     model_nn.eval()
-    #     with torch.no_grad():
-    #         val_outputs = model_nn(X_val.to(device))
-    #         val_loss = criterion(val_outputs, y_val.to(device)).item()
-
-    #     print(f"Fold {fold_cv+1} MAE: {val_loss:.4f}")
-    #     cv_scores.append(-val_loss)  # negative MAE for consistency
-
-    # # Print CV results
-    # print("\nCross-validation scores (negative MAE):", cv_scores)
-    # print("Mean cross-validation score (negative MAE):", np.mean(cv_scores))
-
-    # # Final training on full training set
-    # print("\nTraining final model on full training set")
-    # model_nn_final = FiveLayerNN(input_dim=X_train.shape[1]).to(device)
-    # criterion = nn.L1Loss()
-    # optimizer = optim.Adam(model_nn_final.parameters(), lr=learning_rate)
-
-    # # Dataset and DataLoader
-    # full_train_dataset = torch.utils.data.TensorDataset(X_train_tensor, y_train_tensor)
-    # full_train_loader = torch.utils.data.DataLoader(full_train_dataset, batch_size=batch_size, shuffle=True)
-
-    # for epoch in tqdm(range(num_epochs), desc="Epochs (Final Model)"):
-    #     model_nn_final.train()
-    #     epoch_loss = 0
-    #     for batch_X, batch_y in tqdm(full_train_loader, desc=f"Batch Training (Final Model, Epoch {epoch+1})", leave=False):
-    #         batch_X, batch_y = batch_X.to(device), batch_y.to(device)
-    #         optimizer.zero_grad()
-    #         outputs = model_nn_final(batch_X)
-    #         loss = criterion(outputs, batch_y)
-    #         loss.backward()
-    #         optimizer.step()
-    #         epoch_loss += loss.item()
-
-    #     tqdm.write(f"Final Model Epoch {epoch+1} Loss: {epoch_loss/len(full_train_loader):.4f}")
-
-    # # Evaluate on test set
-    # model_nn_final.eval()
-    # with torch.no_grad():
-    #     test_outputs = model_nn_final(X_test_tensor.to(device))
-    #     test_score = criterion(test_outputs, y_test_tensor.to(device)).item()
-
-    # print("\nTest Score (MAE):", test_score)
-
-
-
-
-    return test_score
 
 
 
@@ -376,6 +587,14 @@ if __name__ == '__main__':
     parser.add_argument('--use_checkpoint', action='store_true', help='Whether to use checkpoint file. If not, use raw model.')
     parser.add_argument('--model_not_named_target', action='store_false', help='Whether the model name contains the target variable')
     parser.add_argument('--grouped_bands', nargs='+', type=int, help="List of grouped bands")
+    parser.add_argument('--country', type=str, help='Two-letter country code for single country training (e.g., ET, KE)')
+    
+    parser.add_argument('--enhanced_targets', action='store_true', help='Use enhanced fine-tuning targets (with hv025)')
+    parser.add_argument('--use_location_features', action='store_true', help='Include location features')
+    parser.add_argument('--use_location_encoder', action='store_true', help='Use LocationEncoder for coordinates')
+    parser.add_argument('--coord_encoding_method', type=str, default='spherical_harmonics', 
+                       choices=['spherical_harmonics', 'sh_siren'], help='Coordinate encoding method')
+    parser.add_argument('--cleaned', action='store_true', help='Use cleaned data or not')
     
     args = parser.parse_args()
     maes = []
@@ -384,9 +603,20 @@ if __name__ == '__main__':
     elif args.mode == 'spatial':
         for i in range(5):
             fold = i + 1
-            mae = evaluate(str(fold), args.model_name, args.target, args.use_checkpoint,args.model_not_named_target,args.imagery_path, args.imagery_source, args.mode, args.model_output_dim, grouped_bands=args.grouped_bands)
+            mae = evaluate(
+                str(fold), args.model_name, args.target, args.use_checkpoint, args.model_not_named_target,
+                args.imagery_path, args.imagery_source, args.mode, args.model_output_dim, 
+                args.grouped_bands, args.country, args.enhanced_targets, args.use_location_features,
+                args.use_location_encoder, args.coord_encoding_method, args.cleaned
+            )
             maes.append(mae)
-        print(np.mean(maes), np.std(maes)/np.sqrt(5))
+        
+        mean_mae = np.mean(maes)
+        std_err = np.std(maes) / np.sqrt(5)
+        print(f"\n=== SPATIAL EVALUATION SUMMARY ===")
+        print(f"Mean MAE: {mean_mae:.4f} ± {std_err:.4f}")
+        print(f"Individual MAEs: {[f'{mae:.4f}' for mae in maes]}")
+    
     elif args.mode == 'one_country':
         COUNTRIES = ['Madagascar', 'Burundi', 'Uganda', 'Mozambique', 'Rwanda',
                     'Zambia', 'Tanzania', 'Malawi', 'Ethiopia', 'Kenya', 'Zimbabwe',

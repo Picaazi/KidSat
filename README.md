@@ -1,187 +1,240 @@
-# KidSat: satellite imagery to map childhood poverty
+# Extension works on KidSat: Enhancing Satellite-Based Poverty Estimation through Spatial Encoding and Regression Head
 
-## Introduction
+This repository contains extension work on the [KidSat: satellite imagery to map childhood poverty](https://github.com/MLGlobalHealth/KidSat) dataset and benchmark project. Our extensions enhance the original computer vision pipeline by integrating **multi-modal learning**, which combines satellite imagery with **geographic coordinate encodings** (e.g., Spherical Harmonics and SIREN-based representations). The system aims to improve prediction of the percentage of children experiencing severe deprivation in each region through **spatially-aware regression architectures** that incorporate both visual and location-based information and refined training pipeline.
 
-This is a repository for the work **KidSat: satellite imagery to map childhood poverty**.
+## Key Improvements
+Based on our proposed framework, we explored several methods to improve fine-tuning and reduce prediction error (MAE) through spatial analysis:
 
-![Figure 1](https://i.imgur.com/xLbiFwq.png)
+1. **Enhanced Data Processing Pipeline:** Improved data cleaning and feature selection  
+2. **Spherical Harmonics Spatial Encoders:** Added geographic information encoding  
+3. **SIREN Network Integration:** Optional learnable spatial feature representation  
+4. **Advanced Regression Heads:** Non-linear models for final prediction
 
+**Main Result:** Our best configuration (improved data processing + Spherical Harmonics encoding + LightGBM regression head) achieved a **15.8% reduction in MAE** compared to the original pipeline.
 
-## Getting All DHS Data
+## Architecture Overview
+![Model Diagram](attachments/flowchart.png)
+*Figure 1: Enhanced pipeline architecture. Left: Standard DINOv2 fine-tuning on satellite imagery. Center: Feature extraction combining visual embeddings with spatial encodings. Right: Optional SIREN pre-training for learnable geographic representations. The system supports both basic Spherical Harmonics encoding and advanced SH+SIREN approaches.*
 
-The Demographic and Health Surveys (DHS) program gathers and shares vital data on population, health, and nutrition in developing countries to inform public health policies. Their collection procedures and methods are listed [here](https://dhsprogram.com/data/data-collection.cfm).
-
-To access DHS data, please follow these steps:
-
-1. **Register for DHS Access:**
-   - Visit the registration page [here](https://dhsprogram.com/data/new-user-registration.cfm) and apply for access to the DHS data.
-
-
-2. **Obtain the Data for Following Countries and Years**
-    For the following country and years, select ALL STATA and Geographic Data.
-    | Country      | Year(s) |
-    |--------------|---------|
-    | Zambia       | 2007, 2013, 2018|
-    | Malawi       | 2000, 2004, 2010, 2015|
-    | Uganda       | 2000, 2006, 2011, 2016|
-    | Comoros      | 2012|
-    | Tanzania     | 1999, 2010, 2015, 2022|
-    | Kenya        | 2003, 2008, 2014, 2022|
-    | Angola       | 2015    |
-    | Ethiopia     | 2000, 2005, 2011, 2016, 2019|
-    | Rwanda       | 2005, 2007, 2010, 2014, 2019|
-    | Lesotho      | 2004, 2009, 2014    |
-    | Madagascar   | 1997, 2008, 2021|
-    | Zimbabwe     | 1999, 2005, 2010, 2015|
-    | Burundi      | 2010, 2016    |
-    | Mozambique   | 2011    |
-    | Eswatini     | 2006    |
-    | South Africa | 2016    |
-
-    The folders should be unzipped and store in `survey_processing/dhs_data/` (e.g. `survey_processing/dhs_data/` should contain subfolders of "ET_20XX_DHS_XXX..." etc. ).
----
-
-## Usage for Imagery Scraping
-
-This section provides step-by-step instructions on how to use this repository to achieve its intended functionality.
-
-### Prerequisites
-
-Before you start, make sure you have registered a Google Earth Engine project for academic purposes. You will need your project name to query the API. The sign-up page is [here](https://signup.earthengine.google.com).
-
-
-1. **Set Up Environment**
-
-    Example:
-
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-2. **Configuration**
-
-    You need to update your Google Earth Engine project name to `imagery_scraping/config/google_config.json`. The format (for me) was `ee-YOUR_GMAIL_NAME`. Note, please do not push your project name to GitHub.
-
-3. **Query File (Optional)**
-
-    The file `imagery_scraping/config/query.json` contains an example of how you should query imageries. You need to provide the latitude and longitude in WGS84 format. In our work, we mainly use shapefile from DHS directly.
-
-4. **Running the Application**
-    You first need to go to the `imagery_scraping` directory
-
-    Example:
-
-
-    An example of usage is shown below:
-
-    ```bash
-    python main.py "config/query.csv" "EarthImagery" 2021 "L8" -r 5
-    ```
-
-    It will prompt you to authenticate for Google. If all goes well, it will download the images to your Google Drive under a folder called `EarthImagery`. The images will be collected from the 2021 LandSat8 dataset and will be centered around the coordinates you provided in the query file with a 5 km square window.
-
-    If you have a shapefile from DHS, you can also use for example
-
-    ```bash
-    python main.py "ETGE81FL" "Ethiopia2021Imagery" 2021 "S2" -r 5
-    ```
-    
-    to extract the imagery.
-
-5. **Visualization (Optional)**
-
-    To see the imagery, you need to download the imagery data from Google Drive first. We provide sample data in `imagery_scraping/data` and a [notebook](imagery_scraping/visualization.ipynb) to see the imagery you queried in true color. Note that this is only a visualization; the original data is much richer and contains more than the three RGB channels. For training, we should use the original data instead of the true-color image alone.
-
-6. **Getting All Imagery**
-
-    We recommend using this [notebook](imagery_scraping/get_imagery.ipynb) to download all imagery and keep track of progress as GEE has a upper limit of 3000 jobs at the same time. You will need to download the imagery and save to an accessible location (we will refer to `path_to_parent_imagery_folder` in later sections), each of its subdirectory should be country code + year + source (e.g. ET2019S2 for Ethiopia 2019 Sentinel 2). The notebook should already be formatting the export using this naming convention.
-
-
-## Summarizing the Dataset
-
-Collect all DHS data to `survey_processing/dhs_data`. The following command
-
+## Prerequisites
+### Data Setup
+For DHS data access and satellite imagery collection, please follow the instructions in the [original KidSat repo](https://github.com/MLGlobalHealth/KidSat). You'll need:
+- DHS survey data for 16 countries in Eastern and Southern Africa  
+- Google Earth Engine access for satellite imagery  
+- Landsat 7/8 satellite images ($336\times 336$ pixels for our experiments)  
+### Environment Setup
 ```bash
-python survey_processing/main.py survey_processing/dhs_data
+pip install -r requirements.txt
 ```
 
-would create 5 splits of the training and test data for spatial analysis and before/after 2020 split for temporal analysis.
+## Extension Components
+### 1. Enhanced Data Processing
+Our improved data processing pipeline includes:
+- Dimensionality reduction from 99 to 74 features by combining rarely used indicators  
+- Removal of country-specific columns that introduced noise  
+- Inclusion of previously excluded data points within acceptable thresholds  
+- ~10% increase in usable training data  
 
-## Experiment with MOSAIKS
+### 2. Spatial Encoding with Spherical Harmonics
+We implement Spherical Harmonics (SH) encoding to embed geographic information directly into the model pipeline:  
+```python
+# Coordinate transformation
+colatitude = π/2 - lat * π/180
+azimuth = lon * π/180
 
-The MOSAIKS features were extracted using [IDinsight](https://github.com/IDinsight/mosaiks#mosaiks-satellite-imagery-featurization) package. A [notebook](modelling/mosaiks/main.ipynb) is provided in this repository for getting all features for MOSAIKS.
+# SH basis functions up to degree L=15 (default)
+# Yields 512-dimensional real-valued feature vector
+```
 
-## Experiment with DINOv2
+**Optional SIREN Network Finetuning**: By default, a 4-layer network (256 neurons each) with sinusoidal activations can learn complex location-specific relationships, mapping SH vectors to 128-dimentional learned geographic embeddings.
 
-After having the splits in `survey_processing/processed_data`, you can finetune DINOv2 using the following commands. For the spatial experiment with Landsat imagery, you can use the following code.
+### 3. Enhanced Regression Heads
+Instead of simple Ridge regression, we evaluate several non-linear regression methods:  
+- **LightGBM** (best performance)  
+- XGBoost  
+- Random Forest  
+- Deep Neural Networks  
 
+## Results Visualization
+Our enhanced pipeline shows significant improvements in spatial prediction accuracy:
 
+![Poverty Prediction Map](attachments/Maps_comparisons.png)
+*Figure 2: Administrative Level 2 mean absolute error visualization. Left: Baseline model performance. Right: Enhanced model with SH encoding and LightGBM. The improved model shows notably reduced error rates across Eastern and Southern Africa, with particular improvements in Mozambique, Angola, and Madagascar.*
+
+## Usage
+### Step 1: Enhanced Data Processing
+Process DHS survey data with improved cleaning pipeline:
 ```bash
-python modelling/dino/finetune_spatial.py --fold 1 --model_name dinov2_vitb14 --imagery_path {path_to_parent_imagery_folder} --batch_size 8 --imagery_source L --num_epochs 20
+cd survey_processing
+python main.py dhs_data --cleaned
 ```
+The `--cleaned` flag applies the enhanced data processing that reduces dimensionality from 99 to ~74 features and includes ~10% more training data.
 
-Finetuning sentinel imagery, the normal command is 
-
+### Step 2: Fine-tuning Options
+#### Option A: Standard DINOv2 Fine-tuning (Baseline)
 ```bash
-python modelling/dino/finetune_spatial.py --fold 1 --model_name dinov2_vitb14 --imagery_path {path_to_parent_imagery_folder} --batch_size 1 --imagery_source S --num_epochs 10
+python finetune_spatial.py \
+    --fold 1 \
+    --model_name dinov2_vitb14 \
+    --imagery_path {path_to_imagery_folder} \
+    --batch_size 8 \
+    --imagery_source L \
+    --num_epochs 20 \
+    --cleaned
 ```
 
-Note that to get a cross-validated result, you should use fold 1 to 5.
-
-For temporal finetuning, the command for Landsat is 
-
+#### Option B: SH only (Best Performance - Recommended)
+Standard DINOv2 fine-tuning with Spherical Harmonics encoding applied during evaluation:
 ```bash
-python modelling/dino/finetune_temporal.py --model_name dinov2_vitb14 --imagery_path {path_to_parent_imagery_folder} --batch_size 8 --imagery_source L
+python finetune_spatial.py \
+    --fold 1 \
+    --model_name dinov2_vitb14 \
+    --imagery_path {path_to_imagery_folder} \
+    --batch_size 8 \
+    --imagery_source L \
+    --num_epochs 20 \
+    --cleaned
 ```
+*Note: The SH encoding is added during evaluation phase, providing the best performance with no additional training complexity*
 
-and replace `L` to `S` for sentinel finetuning.
-
-For evaluation, make sure the all 1-5 finetuned spatial models  (or the finetuned temporal model for temporal evaluation) are in `modelling/dino/model` and run 
-
+#### Option C: SH + SIREN (Two-stage training)
+**Stage 1:** Pre-train SIREN network on geographic coordinates:
 ```bash
-python modelling/dino/evaluate.py --use_checkpoint --imagery_path {path_to_parent_imagery_folder} --imagery_source L --mode spatial
+python finetune_siren.py \
+    --fold 1 \
+    --imagery_path {path_to_imagery_folder} \
+    --imagery_source L \
+    --representation_dim 128 \
+    --hidden_dim 256 \
+    --num_layers 4 \
+    --batch_size 32 \
+    --num_epochs 200 \
+    --sh_L 15 \
+    --cleaned
+```
+**Stage 2:** Standard DINOv2 fine-tuning (same as Option A):
+```bash
+python finetune_spatial.py \
+    --fold 1 \
+    --model_name dinov2_vitb14 \
+    --imagery_path {path_to_parent_imagery_folder} \
+    --batch_size 8 \
+    --imagery_source L \
+    --num_epochs 20 \
+    --cleaned
+```
+### Step 3: Evaluation
+#### Standard (visual-only)
+```bash
+python evaluate.py \
+    --fold 1 \
+    --model_name dinov2_vitb14 \
+    --imagery_path {path_to_parent_imagery_folder} \
+    --imagery_source L \
+    --mode spatial \
+    --use_checkpoint \
+    --cleaned
 ```
 
-Change the `--mode` to `temporal` for temporal evaluation, and change `L` to `S` for imagery sources.
-Remove the `--use_checkpoint` for evaluating on raw DINO models.
-
-## Experiment with SatMAE
-### Finetuning
-To run the finetuning process, you first need to download the checkpoints for fMoW-SatMAE [non-temporal](https://zenodo.org/record/7369797/files/fmow_pretrain.pth) or [temporal](https://zenodo.org/record/7369797/files/pretrain_fmow_temporal.pth). Then run the following:
-
-```sh
-python -m modelling.satmae.satmae_finetune --pretrained_ckpt $CHECKPOINT_PATH --dhs_path ./survey_processing/processed_data/train_fold_1.csv --output_path $OUTPUT_DIR --imagery_path $IMAGERY_PATH
+#### Visual + (SH + SIREN)
+```bash
+python evaluate.py \
+    --fold 1 \
+    --model_name dinov2_vitb14 \
+    --imagery_path {path_to_parent_imagery_folder} \
+    --imagery_source L \
+    --mode spatial \
+    --use_checkpoint \
+    --use_location_features \
+    --coord_encoding_method sh_siren \
+    --cleaned
 ```
-Arguments:
-- `--pretrained_ckpt`: Checkpoint of pretrained SatMAE model.
-- `--imagery_path`: Path to imagery folder
-- `--dhs_path`: Path to DHS `.csv` file
-- `--output_path`: Path to export the output. A unique subdirectory will be created.
-- `--batch_size`
-- `--random_seed`
-- `--sentinel`: Landsat is used by default. Turn this on to use Sentinel imagery
-- `--temporal`: Add this flag to use the temporal mode
-- `--epochs`: Number of epochs
-- `--stopping_delta`: Delta for early stopping
-- `--stopping_patience`: Early stopping patience
-- `--loss`: Either `l1` (default) or `l2`.
-- `--lr`: Learning rate
-- `--weight_decay`: Weight decay for Adam optimizer
-- `--enable_profiling`: Enable reporting of loading/inference time.
 
-
-### Evaluation
-Evaluation consists of 2 steps: exporting the model output, and perform Ridge Regression. Since exporting the model output is expensive, we split it into 2 separate modules:
-
-To carry out the first step, edit the file `modelling/satmae/satmae_eval` and change the `SATMAE_PATHS` variable accordingly. For each entry, you can put all the model checkpoints you need to evaluate or `None` to use the pretrained checkpoint, along with their fold (1-5). You do not have to put the entries in any order, nor need to put all the folds, but the script caches the data from different folds in memory, which helps significantly reduce the time for loading and preprocessing the satellite images.
-```sh
-python -m modelling.satmae.satmae_eval --output_path $OUTPUT_DIR --imagery_path $IMAGERY_PATH
+#### Visual + Spherical Harmonics
+```bash
+python evaluate.py \
+    --fold 1 \
+    --model_name dinov2_vitb14 \
+    --imagery_path {path_to_parent_imagery_folder} \
+    --imagery_source L \
+    --mode spatial \
+    --use_checkpoint \
+    --use_location_features \
+    --coord_encoding_method spherical_harmonics \
+    --cleaned
 ```
-Arguments
-- `--imagery_path`: Path to imagery folder
-- `--output_path`: Path to export the output. A unique subdirectory will be created.
-- `--batch_size`
-- `--sentinel`: Landsat is used by default. Turn this on to use Sentinel imagery
-- `--temporal`: Add this flag to use the temporal mode
 
-This will export data as Numpy arrays in `.npy` files in the output location, which has the shape `(num_samples, 1025)`. The first 1024 columns (i.e `arr[:, :1024]`) is the predicted feature vector from the model, and the last column (i.e `arr[:, 1024]`) is the target. You can then adapt the script `modelling/satmae/eval_dhs.py` to conduct Ridge Regression or more advanced regression.
+### Configuration Options
+#### Core Arguments (finetune_spatial.py):
+- `--fold {1,2,3,4,5}`: Cross-validation fold number  
+- `--model_name`: DINOv2 model (`dinov2_vitb14`, `dinov2_vitl14`)  
+- `--imagery_path`: Path to parent imagery folder  
+- `--imagery_source {L,S}`: L=Landsat, S=Sentinel  
+- `--emb_size`: Learned model output embedding size (default: 768)  
+- `--batch_size`: Batch size
+- `--num_epochs`: Training epochs
+- `--grouped_bands`: RGB band selection (e.g., `4 3 2` for Landsat 8, set to `None` for automatic choice)  
+- `--cleaned`: Use enhanced data processing pipeline  
+- `--country`: Two-letter country code for single country training
+
+#### SIREN Training Arguments (finetune_siren.py):
+- `--fold {1,2,3,4,5}`: Cross-validation fold number  
+- `--imagery_path`: Path to parent imagery folder  
+- `--imagery_source {L,S}`: L=Landsat, S=Sentinel  
+- `--representation_dim`: Learned representation dimenstion (default: 128)  
+- `--hidden_dim`: SIREN hidden layer dimension (default: 256)  
+- `--num_layers`: Number of SIREN layers (default: 4)  
+- `--batch_size`: Batch size  
+- `--num_epochs`: Training epochs  
+- `--sh_L`: Spherical Harmonics degree (default: 15)
+- `--grouped_bands`: RGB band selection (e.g., `4 3 2` for Landsat 8, set to `None` for automatic choice)  
+- `--cleaned`: Use enhanced data processing pipeline  
+- `--country`: Two-letter country code for single country training
+
+#### Evaluation Arguments (evaluate.py):
+- `--fold {1,2,3,4,5}`: Cross-validation fold number (for spatial mode the script runs for all 5 CV folds by default)   
+- `--mode {spatial,temporal}`: Evaluation benchmark type  
+- `--use_checkpoint`: Use fine-tuned models instead of raw pretrained  
+- `--use_location_features`: Enable spatial encoding features  
+- `--coord_encoding_method {spherical_harmonics, sh_siren}`: Spatial encoding method  
+- `--use_location_encoder`: Use research-validated LocationEncoder library  
+- `--imagery_path`: Path to parent imagery folder  
+- `--imagery_source {L,S}`: L=Landsat, S=Sentinel  
+- `--grouped_bands`: RGB band selection (e.g., `4 3 2` for Landsat 8, set to `None` for automatic choice)  
+- `--cleaned`: Use enhanced data processing pipeline  
+- `--country`: Two-letter country code for single country training
+
+### Complete Workflow Example
+For the best results (SH + LightGBM), run this complete workflow:  
+```bash 
+# 1. Process data with enhancements
+python survey_processing/main.py survey_processing/dhs_data --cleaned
+
+# 2. Fine-tune DINOv2 for all 5 folds  
+for fold in {1..5}; do
+    python modelling/dino/finetune_spatial.py \
+        --fold $fold \
+        --model_name dinov2_vitb14 \
+        --imagery_path {your_imagery_path} \
+        --imagery_source L \
+        --batch_size 8 \
+        --cleaned
+done
+
+# 3. Evaluate with SH (this uses Ridge regression, also saves the used features that can be used to get lgb result)
+python modelling/dino/evaluate.py \
+    --model_name dinov2_vitb14 \
+    --imagery_path {your_imagery_path} \
+    --imagery_source L \
+    --mode spatial \
+    --use_checkpoint \
+    --use_location_features \
+    --coord_encoding_method spherical_harmonics \
+    --cleaned
+
+# 4. Apply LightGBM to saved features 
+# See regression.ipynb for example implementation
+# Or use saved CSV files in modelling/dino/results/
+```
+**Key Insight:** The evaluation script saves extracted features (visual + spatial) that can be used with any regression head. The Ridge regression provides a baseline, but applying LightGBM to these same features yields the best performance improvement.
+
