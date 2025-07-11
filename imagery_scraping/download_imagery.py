@@ -26,7 +26,7 @@ from collections import Counter
 # data collections from google earth
 # from https://developers.google.com/earth-engine/datasets/catalog/landsat
 LANDSAT8_COLLECTIONS = [ # 2013 - Now
-    "LANDSAT/LC08/C02/T1_L2",        # Raw Image Tier 1
+    "LANDSAT/LC08/C02/T1",        # Raw Image Tier 1
     "LANDSAT/LC08/C01/T1_RT",     # Raw Image Tier 1 + Read-Time
     "LANDSAT/LC08/C01/T2",        # Raw Image Tier 2
     # 'LANDSAT/LC08/C01/T1_L2',     # Surface reflecttance Tier 1
@@ -37,7 +37,7 @@ LANDSAT8_COLLECTIONS = [ # 2013 - Now
 ]
 
 LANDSAT7_COLLECTIONS = [ # 1999 - 2021
-    "LANDSAT/LE07/C02/T1_L2",        # Raw Image Tier 1
+    "LANDSAT/LE07/C02/T1",        # Raw Image Tier 1
     'LANDSAT/LE07/C01/T2',        # Raw Image Tier 2
     # 'LANDSAT/LE07/C01/T1_L2',     # Surface Reflectance Tier 1
     # 'LANDSAT/LE07/C01/T2_L2',     # Surface Reflectance Tier 2
@@ -46,7 +46,7 @@ LANDSAT7_COLLECTIONS = [ # 1999 - 2021
 ]
 
 LANDSAT5_COLLECTIONS = [ # 1984 - 2012
-    "LANDSAT/LT05/C02/T1_L2",        # Raw Image Tier 1 (Collection 1)
+    "LANDSAT/LT05/C02/T1",        # Raw Image Tier 1 (Collection 1)
     'LANDSAT/LT05/C01/T2',        # Raw Image Tier 2 (Collection 1)
     # 'LANDSAT/LT05/C01/T1_L2',     # Surface Reflectance Tier 1 (Collection 1)
     # 'LANDSAT/LT05/C01/T2_L2',     # Surface Reflectance Tier 2 (Collection 1)
@@ -60,8 +60,8 @@ LANDSAT9_COLLECTIONS = [ # 2021 - Now
 ]
 
 SENTINEL2_COLLECTIONS = [ # 2015 - Now
-    "COPERNICUS/S2",
     "COPERNICUS/S2_HARMONIZED",
+    "COPERNICUS/S2",
     "COPERNICUS/S2_SR_HARMONIZED",
 ]
 SENSORS = {
@@ -120,7 +120,7 @@ def get_project_name(config_filepath='config/google_config.json'):
     """
     with open(config_filepath, 'r') as file:
         data = json.load(file)
-    return data['project']
+    return data['project_name']
 
 def get_column_name(df, substring, exclude_pattern = None):
     """
@@ -140,7 +140,7 @@ def get_column_name(df, substring, exclude_pattern = None):
                 return c
     return None
 
-def download_imagery(filepath, drive, year, sensor, range_km, rgb_only, parallel = True, verbose = False):
+def download_imagery(filepath, drive, year, sensor, range_km, rgb_only,  dimension = None, start_ind = 0, verbose = False):
     """
     Downloads satellite imagery for specified locations and parameters.
 
@@ -151,12 +151,13 @@ def download_imagery(filepath, drive, year, sensor, range_km, rgb_only, parallel
     - sensor (str): Sensor code ('L5', 'L7', 'L8', 'L9', 'S2') indicating the imagery source.
     - range_km (float): Range in kilometers to define the area around each location.
     - rgb_only (bool): Whether get only RBG bands for the image
+    - dimension (str): Dimension of the image in pixels. For example, '224x224'.
 
     Raises:
     - NotImplementedError: If an unsupported sensor is requested.
     """
     ee.Authenticate()
-    project_name = get_project_name("C:/Users/jgidn/Documents/Summer Project/KidSatExt/imagery_scraping/config/google_config.json")
+    project_name = get_project_name()
     ee.Initialize(project = project_name)
 
     is_csv = filepath[-4:] == '.csv'
@@ -182,8 +183,8 @@ def download_imagery(filepath, drive, year, sensor, range_km, rgb_only, parallel
     else:
         image_collection = SENSORS[sensor][0] # default raw image
     
-    for i in tqdm(range(len(target_df))):
-        
+    for i in tqdm(range(start_ind,len(target_df))):
+    #for i in tqdm(range(10)):
         region = create_square(
             target_df[lat_colname][i],
             target_df[lon_colname][i],
@@ -199,7 +200,7 @@ def download_imagery(filepath, drive, year, sensor, range_km, rgb_only, parallel
             raise (NotImplementedError)
         cloudy_pixel_percentage_threshold = 20
         collection_size = 0
-        while collection_size == 0 and cloudy_pixel_percentage_threshold<=100:
+        while collection_size < 3 and cloudy_pixel_percentage_threshold<=100:
             collection = ee.ImageCollection(image_collection) \
                 .filterBounds(region) \
                 .filterDate(start_date, end_date) \
@@ -208,34 +209,46 @@ def download_imagery(filepath, drive, year, sensor, range_km, rgb_only, parallel
             # Check if the collection is empty
             collection_size = collection.size().getInfo()
         image = collection.median()
+        def convert_to_uint32(image):
+            return image.toUint32()
+
+        # Convert all images in the collection to have consistent data types
+        collection = collection.map(convert_to_uint32)
         # if cloudy_pixel_percentage_threshold==110:
         #     print(cloudy_pixel_percentage_threshold)
 
-        if rgb_only:
-            if 'T2' in image_collection:
-                image = image.select(['SR_B4', 'SR_B3', 'SR_B2'])
-            else:
-                image = image.select(['B4', 'B3', 'B2'])
+        def export_imagery(image):
+            if rgb_only:
+                if 'T2' in image_collection:
+                    image = image.select(['SR_B4', 'SR_B3', 'SR_B2'])
+                else:
+                    image = image.select(['B4', 'B3', 'B2'])
 
-        
- 
-        export_params = {
-            'description': str(target_df[name_colname][i]),
-            'folder': drive,
-            'scale': resolution_m,  # This is the resolution in meters
-            'region': region,
-            'fileFormat': 'GeoTIFF',
-            'maxPixels': 1e10
-        }
+            date_acquired = image.get('system:time_start').getInfo()
 
-        export_task = ee.batch.Export.image.toDrive(image, **export_params)
-        export_task.start()
+            export_params = {
+                'description': target_df[name_colname][i]+'-'+str(date_acquired),
+                'folder': drive,
+                'scale': resolution_m,  # This is the resolution in meters
+                'region': region,
+                'fileFormat': 'GeoTIFF',
+                'maxPixels': 1e10
+            }
+
+            if dimension != None:
+                export_params['dimensions'] = dimension
+
+            export_task = ee.batch.Export.image.toDrive(image, **export_params)
+            export_task.start()
+        for j in range(min(3, collection_size)):
+            image_list = collection.toList(collection.size())
+            export_imagery(ee.Image(image_list.get(j)))
         
-        if not parallel:
-            while export_task.status()['state'] in ['READY', 'RUNNING']:
-                time.sleep(1)
-            if export_task.status()['state'] == 'FAILED':
-                print(export_task.status())
-                error_msg = 'Image.clipToBoundsAndScale: Parameter \'input\' is required.'
-                if export_task.status()['error_message'] == error_msg:
-                    warnings.warn("The dataset does not have the imagery given the filters. Try another timespan, coordinates, or sensor.")
+        # if not parallel:
+        #     while export_task.status()['state'] in ['READY', 'RUNNING']:
+        #         time.sleep(1)
+        #     if export_task.status()['state'] == 'FAILED':
+        #         print(export_task.status())
+        #         error_msg = 'Image.clipToBoundsAndScale: Parameter \'input\' is required.'
+        #         if export_task.status()['error_message'] == error_msg:
+        #             warnings.warn("The dataset does not have the imagery given the filters. Try another timespan, coordinates, or sensor.")
